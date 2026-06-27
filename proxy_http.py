@@ -18,11 +18,42 @@ except ImportError:  # pragma: no cover
 
 DEFAULT_SOCKS5_URL = ""
 DEFAULT_REMOTE_SOCKS5_URL = ""
+DOTENV_PATH = ".env"
 
 _proxy_opener: urllib.request.OpenerDirector | None = None
 _direct_opener: urllib.request.OpenerDirector | None = None
 _active_proxy_url: str | None = None
 _bootstrapped = False
+
+
+def _read_dotenv_value(name: str, *, path: str | None = None) -> str:
+    path = path or DOTENV_PATH
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            lines = file.readlines()
+    except OSError:
+        return ""
+    prefix = f"{name}="
+    export_prefix = f"export {name}="
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith(export_prefix):
+            value = line[len(export_prefix) :]
+        elif line.startswith(prefix):
+            value = line[len(prefix) :]
+        else:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        return value
+    return ""
+
+
+def _env_value(name: str) -> str:
+    return os.environ.get(name, "").strip() or _read_dotenv_value(name).strip()
 
 
 def parse_socks5_url(url: str) -> tuple[str, int, str | None, str | None]:
@@ -61,16 +92,19 @@ def configure_socks5_proxy(*, url: str | None = None, enabled: bool = True) -> d
 
 
 def configure_socks5_from_dict(raw: dict[str, Any] | None) -> dict[str, Any]:
-    if os.environ.get("AUTOTRADER_SOCKS5_DISABLED", "").lower() in {"1", "true", "yes"}:
+    if _env_value("AUTOTRADER_SOCKS5_DISABLED").lower() in {"1", "true", "yes"}:
         return configure_socks5_proxy(enabled=False)
-    env_url = os.environ.get("BINANCE_SOCKS5_PROXY", "").strip()
+    env_url = _env_value("BINANCE_SOCKS5_PROXY")
     raw = raw or {}
     enabled = bool(raw.get("enabled", True))
     if "enabled" in raw:
         enabled = bool(raw["enabled"])
     elif env_url:
         enabled = True
-    url = str(raw.get("url") or env_url or DEFAULT_SOCKS5_URL).strip()
+    raw_url = str(raw.get("url") or "").strip()
+    if raw_url.startswith("env:"):
+        raw_url = _env_value(raw_url[4:])
+    url = str(raw_url or env_url or DEFAULT_SOCKS5_URL).strip()
     if not enabled:
         return configure_socks5_proxy(enabled=False)
     if not url:
@@ -89,7 +123,7 @@ def _ensure_bootstrapped() -> None:
     global _bootstrapped
     if _bootstrapped:
         return
-    if os.environ.get("AUTOTRADER_SOCKS5_DISABLED", "").lower() in {"1", "true", "yes"}:
+    if _env_value("AUTOTRADER_SOCKS5_DISABLED").lower() in {"1", "true", "yes"}:
         configure_socks5_proxy(enabled=False)
         return
     configure_socks5_from_dict({})
