@@ -1258,6 +1258,7 @@ def build_order_intent(
     portfolio: PaperPortfolio,
     auto_exec: AutoExecutionConfig | None = None,
     entry_timing_cfg: Any = None,
+    execution: ExecutionConfig | None = None,
 ) -> OrderIntent | None:
     from growth_sizing import compute_open_notional, mark_prices_from_portfolio, portfolio_equity
 
@@ -1269,7 +1270,16 @@ def build_order_intent(
     order: OrderIntent | None
     if is_futures_market(asset.market):
         order = build_futures_order_intent(
-            asset, symbol, price, signal, strategy, risk, portfolio, auto_exec=auto_exec, equity=equity
+            asset,
+            symbol,
+            price,
+            signal,
+            strategy,
+            risk,
+            portfolio,
+            auto_exec=auto_exec,
+            equity=equity,
+            execution=execution,
         )
     elif signal.action == BUY:
         available_cash = portfolio.available_cash(asset.quote_asset, asset.market)
@@ -2196,6 +2206,7 @@ def build_futures_order_intent(
     portfolio: PaperPortfolio,
     auto_exec: AutoExecutionConfig | None = None,
     equity: Decimal | None = None,
+    execution: ExecutionConfig | None = None,
 ) -> OrderIntent | None:
     from growth_sizing import compute_open_notional, mark_prices_from_portfolio, portfolio_equity
 
@@ -2229,11 +2240,8 @@ def build_futures_order_intent(
 
     def _quantize_close_qty(raw_qty: Decimal) -> Decimal:
         try:
-            filters = fetch_symbol_filters(
-                symbol,
-                ExecutionConfig(binance_futures_base_url=BINANCE_FUTURES_BASE),
-                asset.market,
-            )
+            filter_execution = execution or ExecutionConfig()
+            filters = fetch_symbol_filters(symbol, filter_execution, asset.market)
             step = filters.get("step_size", Decimal("0.00000001"))
         except Exception:
             step = Decimal("0.00000001")
@@ -2475,6 +2483,7 @@ def apply_risk_controls(
 
     quadrant_cfg = quadrant_strategy_cfg if quadrant_strategy_cfg is not None else quadrant_strategy_from_config({})
     timing_cfg = entry_timing_cfg if entry_timing_cfg is not None else entry_timing_from_config({})
+    execution = execution or ExecutionConfig()
 
     reasons = list(signal.reasons)
     blocked: list[str] = []
@@ -2541,6 +2550,7 @@ def apply_risk_controls(
         portfolio,
         auto_exec=auto_exec,
         entry_timing_cfg=timing_cfg,
+        execution=execution,
     )
     if order is None:
         if signal.action == HOLD:
@@ -3604,7 +3614,7 @@ def futures_position_side(order: OrderIntent) -> str:
 
 def fetch_symbol_filters(symbol: str, execution: ExecutionConfig, market: str = "binance_spot") -> dict[str, Decimal]:
     normalized = normalize_symbol(symbol)
-    cache_key = f"{market}:{normalized}"
+    cache_key = f"{execution.mode}:{execution_base_url(execution, market)}:{market}:{normalized}"
     if cache_key in _SYMBOL_FILTER_CACHE:
         return _SYMBOL_FILTER_CACHE[cache_key]
     if execution.mode in {PAPER, APPROVAL_REQUIRED}:

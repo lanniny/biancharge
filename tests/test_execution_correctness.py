@@ -13,10 +13,19 @@ import market_autotrader as ma
 from market_autotrader import (
     BUY,
     SELL,
+    AssetConfig,
     AutoExecutionConfig,
     ExecutionConfig,
     OrderIntent,
+    PaperPortfolio,
+    Position,
+    RiskConfig,
+    Signal,
+    StrategyConfig,
+    build_binance_futures_order_params,
+    build_futures_order_intent,
     client_order_id_for,
+    fetch_symbol_filters,
     open_notional_blocked_reason,
     order_quantity_from_intent,
     slippage_guard_reason,
@@ -153,9 +162,19 @@ class BinanceErrorCodeTests(unittest.TestCase):
 class OrderQuantitySizingTests(unittest.TestCase):
     def setUp(self):
         self._orig = ma.fetch_symbol_filters
+        self._orig_request_json = ma.request_json
+        self._orig_fetch_futures_hedge_mode = ma.fetch_futures_hedge_mode
+        self._orig_hedge_cache = ma._HEDGE_MODE_CACHE
+        self._orig_symbol_cache = dict(ma._SYMBOL_FILTER_CACHE)
+        ma._SYMBOL_FILTER_CACHE.clear()
 
     def tearDown(self):
         ma.fetch_symbol_filters = self._orig
+        ma.request_json = self._orig_request_json
+        ma.fetch_futures_hedge_mode = self._orig_fetch_futures_hedge_mode
+        ma._HEDGE_MODE_CACHE = self._orig_hedge_cache
+        ma._SYMBOL_FILTER_CACHE.clear()
+        ma._SYMBOL_FILTER_CACHE.update(self._orig_symbol_cache)
 
     def test_open_order_below_min_notional_blocks_instead_of_upsizing(self):
         ma.fetch_symbol_filters = lambda *a, **k: {
@@ -198,6 +217,93 @@ class OrderQuantitySizingTests(unittest.TestCase):
             intent_kind=ma.INTENT_CLOSE_LONG,
         )
         self.assertEqual(order_quantity_from_intent(order, ExecutionConfig()), Decimal("4"))
+
+    def test_filter_cache_separates_paper_and_live_modes(self):
+        paper_filters = fetch_symbol_filters(
+            "BTCUSDT",
+            ExecutionConfig(mode=ma.PAPER),
+            "binance_futures",
+        )
+        self.assertEqual(paper_filters["step_size"], Decimal("0.00000001"))
+
+        def fake_request_json(url, **kwargs):
+            return {
+                "symbols": [
+                    {
+                        "symbol": "BTCUSDT",
+                        "filters": [
+                            {"filterType": "LOT_SIZE", "stepSize": "0.001", "minQty": "0.001"},
+                            {"filterType": "PRICE_FILTER", "tickSize": "0.10"},
+                            {"filterType": "MIN_NOTIONAL", "notional": "5"},
+                        ],
+                    }
+                ]
+            }
+
+        ma.request_json = fake_request_json
+        live_filters = fetch_symbol_filters(
+            "BTCUSDT",
+            ExecutionConfig(mode=ma.LIVE),
+            "binance_futures",
+        )
+        self.assertEqual(live_filters["step_size"], Decimal("0.001"))
+
+    def test_reduce_intent_uses_live_filters_for_partial_close(self):
+        calls = []
+
+        def fake_request_json(url, **kwargs):
+            calls.append(url)
+            return {
+                "symbols": [
+                    {
+                        "symbol": "XAUUSDT",
+                        "filters": [
+                            {"filterType": "LOT_SIZE", "stepSize": "0.001", "minQty": "0.001"},
+                            {"filterType": "PRICE_FILTER", "tickSize": "0.01"},
+                            {"filterType": "MIN_NOTIONAL", "notional": "5"},
+                        ],
+                    }
+                ]
+            }
+
+        ma.request_json = fake_request_json
+        ma.fetch_futures_hedge_mode = lambda execution: False
+        asset = AssetConfig(
+            symbol="XAUUSDT",
+            market="binance_futures",
+            base_asset="XAU",
+            quote_asset="USDT",
+            provider={},
+        )
+        portfolio = PaperPortfolio(
+            cash={"USDT_FUTURES": Decimal("100")},
+            positions={"XAUUSDT": Position(quantity=Decimal("0.004"), average_price=Decimal("4028.22"))},
+        )
+        signal = Signal(
+            action=SELL,
+            confidence=Decimal("1"),
+            reasons=["holding reduce"],
+            warnings=[],
+            indicators={"exit_tier": "early"},
+        )
+        order = build_futures_order_intent(
+            asset,
+            "XAUUSDT",
+            Decimal("4088.49"),
+            signal,
+            StrategyConfig(holding_early_take_fraction=Decimal("0.40")),
+            RiskConfig(mode=ma.LIVE),
+            portfolio,
+            auto_exec=AutoExecutionConfig(),
+            execution=ExecutionConfig(mode=ma.LIVE),
+        )
+        self.assertIsNotNone(order)
+        self.assertEqual(order.quantity, Decimal("0.001"))
+
+        params = build_binance_futures_order_params(order, ExecutionConfig(mode=ma.LIVE))
+        self.assertEqual(params["quantity"], "0.001")
+        self.assertEqual(params["reduceOnly"], "true")
+        self.assertTrue(calls)
 
 
 if __name__ == "__main__":
