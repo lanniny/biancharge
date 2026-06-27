@@ -500,6 +500,9 @@ class DecisionWorker:
         from capital_scaling import capital_scaling_from_config
 
         self.capital_scaling_cfg = capital_scaling_from_config(config.get("capital_scaling"))
+        from recovery_mode import recovery_mode_from_config
+
+        self.recovery_mode_cfg = recovery_mode_from_config(config.get("recovery_mode"))
         from profitability import profitability_from_config
 
         self.profitability_raw = config.get("profitability") or {}
@@ -593,6 +596,7 @@ class DecisionWorker:
                 profitability_raw=self.profitability_raw,
                 persona_council_cfg=self.persona_council_cfg,
                 capital_scaling_cfg=self.capital_scaling_cfg,
+                recovery_mode_cfg=self.recovery_mode_cfg,
             )
             watch_source = str(watch_entry.get("source", ""))
             is_managed_position = watch_source.startswith("holding") or watch_source.startswith("pinned")
@@ -767,6 +771,9 @@ class ExecutionWorker:
         self.market_context_cfg = market_context_from_config(config.get("market_context"))
         self.persona_council_cfg = persona_council_from_config(config.get("persona_council"))
         self.capital_scaling_cfg = capital_scaling_from_config(config.get("capital_scaling"))
+        from recovery_mode import recovery_mode_from_config
+
+        self.recovery_mode_cfg = recovery_mode_from_config(config.get("recovery_mode"))
         self.profitability_raw = config.get("profitability") or {}
         self.is_live = self.execution.mode == LIVE or self.risk.mode == LIVE
 
@@ -813,6 +820,7 @@ class ExecutionWorker:
             profitability_raw=self.profitability_raw,
             persona_council_cfg=self.persona_council_cfg,
             capital_scaling_cfg=self.capital_scaling_cfg,
+            recovery_mode_cfg=self.recovery_mode_cfg,
         )
         if refreshed.approved:
             return refreshed

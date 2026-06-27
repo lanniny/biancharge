@@ -249,6 +249,34 @@
     "cache_seconds": 300,
     "snapshot_path": "logs/market-context-latest.json"
   },
+  "recovery_mode": {
+    "enabled": true,
+    "allowed_buckets": [
+      "configured",
+      "pinned",
+      "futuresTradFi"
+    ],
+    "allowed_sessions": [
+      "europe",
+      "overlap_europe_us"
+    ],
+    "min_learning_sample": 15,
+    "max_learning_win_rate": "0.25",
+    "max_learning_profit_factor": "0.60",
+    "max_learning_total_pnl": "0",
+    "min_confidence": "0.95",
+    "min_fusion_pct": "0.80",
+    "min_volume_ratio": "1.00",
+    "max_abs_momentum": "0.018",
+    "max_abs_24h_change": "0.12",
+    "long_min_rsi": "45",
+    "long_max_rsi": "68",
+    "short_min_rsi": "32",
+    "short_max_rsi": "55",
+    "size_factor": "0.25",
+    "max_daily_probes": 2,
+    "max_session_daily_probes": 1
+  },
   "trade_learning": {
     "enabled": true,
     "outcomes_path": "logs/trade-outcomes.jsonl",

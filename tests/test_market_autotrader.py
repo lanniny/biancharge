@@ -627,6 +627,223 @@ class MarketAutotraderTests(unittest.TestCase):
         self.assertEqual(signal.indicators.get("trade_learning_shadow_canary"), "true")
         self.assertFalse(any("shadow paper" in reason for reason in decision.reasons))
 
+    def test_recovery_probe_bypasses_only_session_guard_for_high_quality_setup(self) -> None:
+        from market_context import market_context_from_config
+        from recovery_mode import recovery_mode_from_config
+
+        asset = AssetConfig(
+            symbol="BTCUSDT",
+            market="binance_futures",
+            base_asset="BTC",
+            quote_asset="USDT",
+            provider={},
+        )
+        snapshot = MarketSnapshot(asset=asset, bars=reasonable_buy_bars(), observed_at=1000)
+        signal = ma.Signal(
+            action=BUY,
+            confidence=Decimal("0.98"),
+            reasons=["strong"],
+            warnings=[],
+            indicators={
+                "atr_pct": "0.01",
+                "discovery_bucket": "configured",
+                "discovery_source": "configured",
+                "fusion_bull_pct": "0.90",
+                "mtf_1m": "neutral",
+                "mtf_5m": "bullish",
+                "mtf_15m": "bullish",
+                "regime": "trend_up",
+                "rsi": "59",
+                "momentum": "0.010",
+                "price_change_pct_24h": "0.04",
+                "volume_ratio": "1.30",
+            },
+        )
+        portfolio = PaperPortfolio(cash={"USDT_FUTURES": Decimal("200")}, wallet_balance=Decimal("200"))
+
+        decision = apply_risk_controls(
+            snapshot,
+            signal,
+            StrategyConfig(confidence_scale_sizing=False, buy_quote_fraction=Decimal("0.40")),
+            RiskConfig(
+                mode="paper",
+                max_trade_quote=Decimal("100"),
+                max_position_quote=Decimal("500"),
+                min_trade_quote=Decimal("10"),
+                reserve_futures_available_usdt=Decimal("0"),
+                max_daily_trades=0,
+                require_reason_count=1,
+            ),
+            portfolio,
+            TradingMemory(),
+            auto_exec=ma.AutoExecutionConfig(default_leverage=5, max_leverage=5),
+            market_context={
+                "enabled": True,
+                "session": {"primary": "europe", "label": "欧盘"},
+                "funding": {"phase": "mid"},
+            },
+            market_context_cfg=market_context_from_config({"block_new_opens_sessions": ["europe"]}),
+            trade_learning={
+                "enabled": True,
+                "sampleSize": 20,
+                "winRate": "0.15",
+                "profitFactor": "0.12",
+                "totalRealizedPnl": "-4.6968",
+            },
+            recovery_mode_cfg=recovery_mode_from_config({"enabled": True, "size_factor": "0.25"}),
+            trade_lessons_cfg=__import__("trade_lessons").trade_lessons_from_config({"enabled": False}),
+            bucket_strategy_cfg=__import__("bucket_strategy").bucket_strategy_from_config({"enabled": False}),
+        )
+
+        self.assertTrue(decision.approved, decision.blocked_reasons)
+        self.assertIsNotNone(decision.order)
+        self.assertEqual(decision.order.quote_amount, Decimal("25.00000000"))
+        self.assertFalse(any("Session guard" in reason for reason in decision.blocked_reasons))
+        self.assertEqual(signal.indicators.get("recovery_probe_session"), "europe")
+        self.assertTrue(any("Recovery probe allowed" in reason for reason in decision.reasons))
+
+    def test_recovery_probe_does_not_override_low_quality_session_block(self) -> None:
+        from market_context import market_context_from_config
+        from recovery_mode import recovery_mode_from_config
+
+        asset = AssetConfig(
+            symbol="BTCUSDT",
+            market="binance_futures",
+            base_asset="BTC",
+            quote_asset="USDT",
+            provider={},
+        )
+        snapshot = MarketSnapshot(asset=asset, bars=reasonable_buy_bars(), observed_at=1000)
+        signal = ma.Signal(
+            action=BUY,
+            confidence=Decimal("0.98"),
+            reasons=["strong"],
+            warnings=[],
+            indicators={
+                "atr_pct": "0.01",
+                "discovery_bucket": "configured",
+                "fusion_bull_pct": "0.90",
+                "mtf_1m": "bearish",
+                "mtf_5m": "bullish",
+                "mtf_15m": "bullish",
+                "regime": "trend_up",
+                "rsi": "59",
+                "momentum": "0.010",
+                "price_change_pct_24h": "0.04",
+                "volume_ratio": "1.30",
+            },
+        )
+
+        decision = apply_risk_controls(
+            snapshot,
+            signal,
+            StrategyConfig(confidence_scale_sizing=False, buy_quote_fraction=Decimal("0.40")),
+            RiskConfig(
+                mode="paper",
+                max_trade_quote=Decimal("100"),
+                max_position_quote=Decimal("500"),
+                min_trade_quote=Decimal("10"),
+                reserve_futures_available_usdt=Decimal("0"),
+                max_daily_trades=0,
+                require_reason_count=1,
+            ),
+            PaperPortfolio(cash={"USDT_FUTURES": Decimal("200")}, wallet_balance=Decimal("200")),
+            TradingMemory(),
+            auto_exec=ma.AutoExecutionConfig(default_leverage=5, max_leverage=5),
+            market_context={
+                "enabled": True,
+                "session": {"primary": "europe", "label": "欧盘"},
+                "funding": {"phase": "mid"},
+            },
+            market_context_cfg=market_context_from_config({"block_new_opens_sessions": ["europe"]}),
+            trade_learning={
+                "enabled": True,
+                "sampleSize": 20,
+                "winRate": "0.15",
+                "profitFactor": "0.12",
+                "totalRealizedPnl": "-4.6968",
+            },
+            recovery_mode_cfg=recovery_mode_from_config({"enabled": True}),
+            trade_lessons_cfg=__import__("trade_lessons").trade_lessons_from_config({"enabled": False}),
+            bucket_strategy_cfg=__import__("bucket_strategy").bucket_strategy_from_config({"enabled": False}),
+        )
+
+        self.assertFalse(decision.approved)
+        self.assertTrue(any("Session guard" in reason for reason in decision.blocked_reasons))
+        self.assertIn("bearish 1m", str(signal.indicators.get("recovery_probe")))
+
+    def test_recovery_probe_respects_session_daily_cap(self) -> None:
+        from market_context import market_context_from_config
+        from recovery_mode import recovery_mode_from_config
+
+        memory = TradingMemory()
+        memory.record_recovery_probe("europe")
+        asset = AssetConfig(
+            symbol="BTCUSDT",
+            market="binance_futures",
+            base_asset="BTC",
+            quote_asset="USDT",
+            provider={},
+        )
+        snapshot = MarketSnapshot(asset=asset, bars=reasonable_buy_bars(), observed_at=1000)
+        signal = ma.Signal(
+            action=BUY,
+            confidence=Decimal("0.98"),
+            reasons=["strong"],
+            warnings=[],
+            indicators={
+                "atr_pct": "0.01",
+                "discovery_bucket": "configured",
+                "fusion_bull_pct": "0.90",
+                "mtf_1m": "neutral",
+                "mtf_5m": "bullish",
+                "mtf_15m": "bullish",
+                "regime": "trend_up",
+                "rsi": "59",
+                "momentum": "0.010",
+                "price_change_pct_24h": "0.04",
+                "volume_ratio": "1.30",
+            },
+        )
+
+        decision = apply_risk_controls(
+            snapshot,
+            signal,
+            StrategyConfig(confidence_scale_sizing=False, buy_quote_fraction=Decimal("0.40")),
+            RiskConfig(
+                mode="paper",
+                max_trade_quote=Decimal("100"),
+                max_position_quote=Decimal("500"),
+                min_trade_quote=Decimal("10"),
+                reserve_futures_available_usdt=Decimal("0"),
+                max_daily_trades=0,
+                require_reason_count=1,
+            ),
+            PaperPortfolio(cash={"USDT_FUTURES": Decimal("200")}, wallet_balance=Decimal("200")),
+            memory,
+            auto_exec=ma.AutoExecutionConfig(default_leverage=5, max_leverage=5),
+            market_context={
+                "enabled": True,
+                "session": {"primary": "europe", "label": "欧盘"},
+                "funding": {"phase": "mid"},
+            },
+            market_context_cfg=market_context_from_config({"block_new_opens_sessions": ["europe"]}),
+            trade_learning={
+                "enabled": True,
+                "sampleSize": 20,
+                "winRate": "0.15",
+                "profitFactor": "0.12",
+                "totalRealizedPnl": "-4.6968",
+            },
+            recovery_mode_cfg=recovery_mode_from_config({"enabled": True, "max_session_daily_probes": 1}),
+            trade_lessons_cfg=__import__("trade_lessons").trade_lessons_from_config({"enabled": False}),
+            bucket_strategy_cfg=__import__("bucket_strategy").bucket_strategy_from_config({"enabled": False}),
+        )
+
+        self.assertFalse(decision.approved)
+        self.assertTrue(any("Session guard" in reason for reason in decision.blocked_reasons))
+        self.assertIn("session recovery probe cap", str(signal.indicators.get("recovery_probe")))
+
     def test_risk_resizes_quote_to_remaining_portfolio_heat_room(self) -> None:
         asset = AssetConfig(
             symbol="BTCUSDT",

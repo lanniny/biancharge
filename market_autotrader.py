@@ -1078,6 +1078,7 @@ class TradingMemory:
         self.position_open_context: dict[str, dict[str, Any]] = {}
         self.position_excursion: dict[str, dict[str, str]] = {}
         self.daily_symbol_add_counts: dict[str, int] = {}
+        self.daily_recovery_probe_counts: dict[str, int] = {}
         self.last_open_positions: dict[str, dict[str, Any]] = {}
         self.daily_loss_quote: dict[str, Decimal] = {}
         self.daily_funding_fee_quote: dict[str, Decimal] = {}
@@ -1129,6 +1130,23 @@ class TradingMemory:
             self.daily_symbol_add_counts[add_key] = self.daily_symbol_add_counts.get(add_key, 0) + 1
         elif is_open:
             self.position_opened_at[normalize_symbol(symbol)] = timestamp
+
+    def recovery_probe_count_today(self, session: str | None = None) -> int:
+        today = utc_today_key()
+        if session:
+            return self.daily_recovery_probe_counts.get(f"{today}:{session}", 0)
+        prefix = f"{today}:"
+        return sum(
+            count
+            for key, count in self.daily_recovery_probe_counts.items()
+            if str(key).startswith(prefix)
+        )
+
+    def record_recovery_probe(self, session: str) -> None:
+        if not session:
+            return
+        key = f"{utc_today_key()}:{session}"
+        self.daily_recovery_probe_counts[key] = self.daily_recovery_probe_counts.get(key, 0) + 1
 
     def record_loss(self, amount: Decimal) -> None:
         if amount <= 0:
@@ -1221,6 +1239,9 @@ class TradingMemory:
         memory.daily_symbol_add_counts = {
             str(k): int(v) for k, v in payload.get("daily_symbol_add_counts", {}).items()
         }
+        memory.daily_recovery_probe_counts = {
+            str(k): int(v) for k, v in payload.get("daily_recovery_probe_counts", {}).items()
+        }
         memory.last_open_positions = {
             str(k): dict(v) if isinstance(v, dict) else {}
             for k, v in payload.get("last_open_positions", {}).items()
@@ -1245,6 +1266,7 @@ class TradingMemory:
             "position_peak_price": self.position_peak_price,
             "position_exit_tiers": self.position_exit_tiers,
             "daily_symbol_add_counts": self.daily_symbol_add_counts,
+            "daily_recovery_probe_counts": self.daily_recovery_probe_counts,
             "last_open_positions": self.last_open_positions,
         }
         atomic_write_json(state_path, payload)
@@ -2457,6 +2479,7 @@ def apply_risk_controls(
     profitability_raw: dict[str, Any] | None = None,
     persona_council_cfg: Any = None,
     capital_scaling_cfg: Any = None,
+    recovery_mode_cfg: Any = None,
 ) -> RiskDecision:
     from growth_sizing import effective_max_daily_loss, mark_prices_from_portfolio, portfolio_equity, portfolio_heat
     from entry_timing import entry_timing_defer_reason, entry_timing_from_config
@@ -2688,6 +2711,41 @@ def apply_risk_controls(
         )
         if ctx_reason and not order.reduce_only:
             blocked.append(ctx_reason)
+            if recovery_mode_cfg is not None and getattr(recovery_mode_cfg, "enabled", False):
+                from recovery_mode import evaluate_recovery_probe
+
+                probe = evaluate_recovery_probe(
+                    cfg=recovery_mode_cfg,
+                    market_context=market_context,
+                    trade_learning=trade_learning,
+                    indicators=indicators,
+                    action=order.action,
+                    confidence=decimal_from(signal.confidence),
+                    memory=memory,
+                )
+                indicators["recovery_probe"] = {
+                    "approved": probe.approved,
+                    "reason": probe.reason,
+                    "sizeFactor": str(probe.size_factor),
+                    "session": probe.session,
+                    "bucket": probe.bucket,
+                }
+                if probe.approved:
+                    blocked = [reason for reason in blocked if reason != ctx_reason]
+                    if Decimal("0") < probe.size_factor < Decimal("1") and order.quote_amount > 0:
+                        scaled = (order.quote_amount * probe.size_factor).quantize(
+                            Decimal("0.00000001"), rounding=ROUND_DOWN
+                        )
+                        if scaled != order.quote_amount:
+                            order = replace(order, quote_amount=scaled)
+                    indicators["recovery_probe_session"] = probe.session
+                    indicators["recovery_probe_bucket"] = probe.bucket
+                    reasons.append(
+                        f"Recovery probe allowed session guard bypass: {probe.reason}; "
+                        f"size x{probe.size_factor}."
+                    )
+                else:
+                    reasons.append(f"Recovery probe rejected: {probe.reason}.")
         # Stage 4: never open a fresh position on a symbol being delisted.
         if not order.reduce_only:
             try:
@@ -3201,6 +3259,9 @@ def execute_paper(
         if quantity > 0:
             status = "executed"
             memory.record_trade(symbol, snapshot.observed_at)
+            recovery_session = str(signal.indicators.get("recovery_probe_session") or "")
+            if recovery_session:
+                memory.record_recovery_probe(recovery_session)
         else:
             status = "skipped"
 
@@ -4926,6 +4987,9 @@ def execute_live_order(
                         details["protectionWarning"] = "fill confirmed but TP/SL not attached (missing stop/take-profit prices)"
             if quantity > 0 or quote_amount > 0:
                 memory.record_trade(symbol, snapshot.observed_at, is_open=is_open, is_add=is_add)
+                recovery_session = str(signal.indicators.get("recovery_probe_session") or "")
+                if is_open and recovery_session:
+                    memory.record_recovery_probe(recovery_session)
                 if is_open and not is_add:
                     clear_position_exit_tiers(memory, symbol)
                 exit_tier = signal.indicators.get("exit_tier", "")
@@ -5584,6 +5648,9 @@ def _run_once_monolithic(config: dict[str, Any], memory: TradingMemory | None = 
     from capital_scaling import capital_scaling_from_config
 
     capital_scaling_cfg = capital_scaling_from_config(config.get("capital_scaling"))
+    from recovery_mode import recovery_mode_from_config
+
+    recovery_mode_cfg = recovery_mode_from_config(config.get("recovery_mode"))
 
     if is_live and account_error is None:
         external_outcomes = process_live_position_closures_at_cycle_start(
@@ -5654,6 +5721,7 @@ def _run_once_monolithic(config: dict[str, Any], memory: TradingMemory | None = 
             profitability_raw=None,
             persona_council_cfg=persona_council_cfg,
             capital_scaling_cfg=capital_scaling_cfg,
+            recovery_mode_cfg=recovery_mode_cfg,
         )
         analyze_only = discovery_cfg.enabled and watch_entry and not watch_entry.get("executable", True)
         if analyze_only:
