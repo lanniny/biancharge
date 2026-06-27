@@ -2077,8 +2077,12 @@ def live_safety_blocked_reasons(
         )
     if kill_switch_active(risk.kill_switch_path):
         blocked.append(f"Kill switch active at {risk.kill_switch_path}; all live orders blocked.")
-    if not live_trading_armed(risk.live_arm_path):
-        blocked.append(f"Live trading not armed; create {risk.live_arm_path} after manual review.")
+    arm_status = live_trading_arm_status(risk.live_arm_path)
+    if not arm_status.get("armed"):
+        if arm_status.get("reason") == "expired":
+            blocked.append(f"Live trading arm expired at {arm_status.get('expiresAt')}; re-arm after manual review.")
+        else:
+            blocked.append(f"Live trading not armed; create {risk.live_arm_path} after manual review.")
         blocked.append("Binance matching-engine live orders are not supported until armed.")
     if memory is not None:
         if risk.daily_drag_blocks == "all":
@@ -3212,8 +3216,91 @@ def kill_switch_active(path: str) -> bool:
     return Path(path).exists()
 
 
+def _parse_arm_expiry(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    try:
+        normalized = text.replace("Z", "+00:00") if text.endswith("Z") else text
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
+    except ValueError:
+        return None
+
+
 def live_trading_armed(path: str) -> bool:
-    return Path(path).exists()
+    arm_path = Path(path)
+    if not arm_path.exists():
+        return False
+    try:
+        text = arm_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+    if not text:
+        return True
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return True
+    if not isinstance(payload, dict):
+        return True
+    expiry = _parse_arm_expiry(payload.get("expires_at") or payload.get("expiresAt"))
+    if expiry is not None and time.time() >= expiry:
+        return False
+    return True
+
+
+def live_trading_arm_status(path: str) -> dict[str, Any]:
+    arm_path = Path(path)
+    exists = arm_path.exists()
+    status: dict[str, Any] = {"path": path, "exists": exists, "armed": False}
+    if not exists:
+        status["reason"] = "missing"
+        return status
+    try:
+        text = arm_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        status["reason"] = f"unreadable:{exc}"
+        return status
+    if not text:
+        status["armed"] = True
+        status["format"] = "empty"
+        return status
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        status["armed"] = True
+        status["format"] = "legacy_text"
+        return status
+    if not isinstance(payload, dict):
+        status["armed"] = True
+        status["format"] = "legacy_json"
+        return status
+    expiry_raw = payload.get("expires_at") or payload.get("expiresAt")
+    expiry = _parse_arm_expiry(expiry_raw)
+    if expiry is not None:
+        status["expiresAt"] = expiry_raw
+        status["expiresAtEpoch"] = int(expiry)
+        if time.time() >= expiry:
+            status["reason"] = "expired"
+            return status
+    status["armed"] = True
+    status["format"] = "json"
+    if payload.get("armed_by") or payload.get("armedBy"):
+        status["armedBy"] = payload.get("armed_by") or payload.get("armedBy")
+    if payload.get("armed_at") or payload.get("armedAt"):
+        status["armedAt"] = payload.get("armed_at") or payload.get("armedAt")
+    return status
 
 
 def resolve_api_credentials(execution: ExecutionConfig) -> tuple[str, str]:
@@ -5611,10 +5698,12 @@ def main() -> int:
     memory = TradingMemory.load(execution.state_path if is_live else None)
     print_json({"socks5Proxy": {**proxy_status(), **socks5_info}})
     if is_live:
+        arm_status = live_trading_arm_status(risk.live_arm_path)
         print_json(
             {
                 "liveTrading": True,
-                "armed": live_trading_armed(risk.live_arm_path),
+                "armed": bool(arm_status.get("armed")),
+                "armStatus": arm_status,
                 "killSwitch": kill_switch_active(risk.kill_switch_path),
                 "allowLiveTrading": risk.allow_live_trading,
                 "maxTradeQuote": str(risk.max_trade_quote),

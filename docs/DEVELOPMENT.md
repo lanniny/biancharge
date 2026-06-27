@@ -164,7 +164,7 @@ BINANCE_SOCKS5_PROXY=<socks5-url-from-provider>
 | 闸门 | 条件 |
 |------|------|
 | 配置 | `risk.mode=live` + `execution.mode=live` + `allow_live_trading=true` |
-| Arm 文件 | 存在 `logs/live-trading.armed` |
+| Arm 文件 | `logs/live-trading.armed` 存在，且 JSON `expires_at` 未过期 |
 | Kill 文件 | **不得**存在 `logs/live-trading.kill` |
 
 ---
@@ -302,8 +302,8 @@ sudo systemctl restart market-autotrader
 sudo journalctl -u market-autotrader -n 50 --no-pager
 
 # Live 闸门
-touch logs/live-trading.armed      # 允许 live 下单
-rm logs/live-trading.armed         # 禁止新开（仅分析）
+pwsh ./arm_live_trading.ps1 -Hours 8  # 允许 live 下单（JSON arm，默认 8 小时过期）
+rm logs/live-trading.armed            # 禁止新开（仅分析）
 touch logs/live-trading.kill       # 紧急：等同 kill switch
 rm logs/live-trading.kill
 

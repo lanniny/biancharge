@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import time
 from decimal import Decimal
 from pathlib import Path
 
@@ -24,6 +25,8 @@ from market_autotrader import (
     execute_decision,
     execute_paper,
     execution_from_config,
+    live_trading_arm_status,
+    live_trading_armed,
     record_to_json,
     run_once,
     submit_binance_order_test,
@@ -264,6 +267,50 @@ class MarketAutotraderTests(unittest.TestCase):
             self.assertFalse(decision.approved)
             self.assertEqual(decision.action, BLOCKED)
             self.assertIn("not supported", " ".join(decision.blocked_reasons))
+
+    def test_live_trading_arm_accepts_legacy_plain_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            arm = Path(tmpdir) / "live-trading.armed"
+            arm.write_text("armed", encoding="utf-8")
+
+            self.assertTrue(live_trading_armed(str(arm)))
+            self.assertTrue(live_trading_arm_status(str(arm))["armed"])
+
+    def test_live_trading_arm_json_ttl(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            arm = Path(tmpdir) / "live-trading.armed"
+            arm.write_text(
+                json.dumps({"armed_at": "2026-01-01T00:00:00Z", "expires_at": time.time() + 3600}),
+                encoding="utf-8",
+            )
+
+            self.assertTrue(live_trading_armed(str(arm)))
+            status = live_trading_arm_status(str(arm))
+            self.assertTrue(status["armed"])
+            self.assertEqual(status["format"], "json")
+
+    def test_expired_live_trading_arm_blocks_live_orders(self) -> None:
+        snapshot = snapshot_for(rising_bars())
+        signal = build_signal(snapshot, StrategyConfig())
+        portfolio = PaperPortfolio.from_config({"cash": {"USDT": "1000"}})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            arm = Path(tmpdir) / "live-trading.armed"
+            arm.write_text(
+                json.dumps({"armed_at": "2026-01-01T00:00:00Z", "expires_at": time.time() - 1}),
+                encoding="utf-8",
+            )
+            risk = RiskConfig(
+                mode=LIVE,
+                allow_live_trading=True,
+                live_arm_path=str(arm),
+            )
+
+            decision = apply_risk_controls(snapshot, signal, StrategyConfig(), risk, portfolio, TradingMemory())
+
+            self.assertFalse(decision.approved)
+            joined = " ".join(decision.blocked_reasons)
+            self.assertIn("arm expired", joined)
+            self.assertIn("not supported", joined)
 
     def test_paper_execution_records_reasoned_buy_and_updates_portfolio(self) -> None:
         snapshot = snapshot_for(reasonable_buy_bars())

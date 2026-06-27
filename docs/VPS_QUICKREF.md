@@ -22,9 +22,11 @@ tail -f logs/market-autotrader-live-decisions.jsonl
 
 | 操作 | 命令 |
 |------|------|
-| 允许下单 | `touch logs/live-trading.armed` |
+| 允许下单 | `pwsh ./arm_live_trading.ps1 -Hours 8` |
 | 禁止新开 | `rm logs/live-trading.armed` |
 | 紧急停 | `touch logs/live-trading.kill` |
+
+`arm_live_trading.ps1` writes a JSON arm file with an expiry timestamp; expired arm files block new live orders.
 
 ## 密钥
 
