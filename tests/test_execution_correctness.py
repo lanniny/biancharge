@@ -26,6 +26,7 @@ from market_autotrader import (
     build_futures_order_intent,
     client_order_id_for,
     fetch_symbol_filters,
+    maybe_raise_quality_probe_to_exchange_minimum,
     open_notional_blocked_reason,
     order_quantity_from_intent,
     slippage_guard_reason,
@@ -197,6 +198,57 @@ class OrderQuantitySizingTests(unittest.TestCase):
         self.assertIn("below min notional", reason)
         with self.assertRaises(ValueError):
             order_quantity_from_intent(order, ExecutionConfig())
+
+    def test_quality_probe_can_raise_to_exchange_minimum(self):
+        ma.fetch_symbol_filters = lambda *a, **k: {
+            "step_size": Decimal("0.01"),
+            "min_qty": Decimal("0.01"),
+            "min_notional": Decimal("5"),
+        }
+        order = OrderIntent(
+            action=BUY,
+            symbol="TESTUSDT",
+            market="binance_futures",
+            quote_asset="USDT",
+            quote_amount=Decimal("3.50"),
+            estimated_price=Decimal("100"),
+            order_type=ma.ORDER_MARKET,
+            intent_kind=ma.INTENT_OPEN_LONG,
+        )
+        adjusted, reason = maybe_raise_quality_probe_to_exchange_minimum(
+            order,
+            execution=ExecutionConfig(),
+            risk=RiskConfig(max_trade_quote=Decimal("10")),
+            indicators={"trade_learning_quality_probe": {"approved": True}},
+        )
+        self.assertEqual(adjusted.quote_amount, Decimal("5.00000000"))
+        self.assertIn("exchange minimum", reason)
+        self.assertEqual(order_quantity_from_intent(adjusted, ExecutionConfig()), Decimal("0.05"))
+
+    def test_quality_probe_does_not_exceed_risk_cap_for_exchange_minimum(self):
+        ma.fetch_symbol_filters = lambda *a, **k: {
+            "step_size": Decimal("1"),
+            "min_qty": Decimal("1"),
+            "min_notional": Decimal("5"),
+        }
+        order = OrderIntent(
+            action=BUY,
+            symbol="TESTUSDT",
+            market="binance_futures",
+            quote_asset="USDT",
+            quote_amount=Decimal("3.50"),
+            estimated_price=Decimal("100"),
+            order_type=ma.ORDER_MARKET,
+            intent_kind=ma.INTENT_OPEN_LONG,
+        )
+        adjusted, reason = maybe_raise_quality_probe_to_exchange_minimum(
+            order,
+            execution=ExecutionConfig(),
+            risk=RiskConfig(max_trade_quote=Decimal("50")),
+            indicators={"trade_learning_quality_probe": {"approved": True}},
+        )
+        self.assertEqual(adjusted.quote_amount, Decimal("3.50"))
+        self.assertIsNone(reason)
 
     def test_reduce_only_explicit_quantity_not_blocked_by_open_min_notional(self):
         ma.fetch_symbol_filters = lambda *a, **k: {

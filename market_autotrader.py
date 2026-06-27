@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timezone
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, ROUND_UP
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -1345,6 +1345,47 @@ def build_order_intent(
 
 def resize_order_quote(order: OrderIntent, quote_amount: Decimal) -> OrderIntent:
     return replace(order, quote_amount=quote_amount.quantize(Decimal("0.00000001"), rounding=ROUND_DOWN))
+
+
+def min_open_quote_for_exchange(order: OrderIntent, execution: ExecutionConfig) -> Decimal:
+    """Minimum quote that can produce a valid opening quantity/notional."""
+    if order.reduce_only or order.estimated_price <= 0:
+        return Decimal("0")
+    filters = fetch_symbol_filters(order.symbol, execution, order.market)
+    min_quote = filters.get("min_notional", Decimal("0")) or Decimal("0")
+    min_qty = filters.get("min_qty", Decimal("0")) or Decimal("0")
+    step = filters.get("step_size", Decimal("0")) or Decimal("0")
+    if min_qty > 0:
+        qty = min_qty
+        if step > 0:
+            steps = (qty / step).to_integral_value(rounding=ROUND_UP)
+            qty = (steps * step).quantize(step, rounding=ROUND_UP)
+        min_quote = max(min_quote, qty * order.estimated_price)
+    return min_quote.quantize(Decimal("0.00000001"), rounding=ROUND_UP)
+
+
+def maybe_raise_quality_probe_to_exchange_minimum(
+    order: OrderIntent,
+    *,
+    execution: ExecutionConfig | None,
+    risk: RiskConfig,
+    indicators: dict[str, Any],
+) -> tuple[OrderIntent, str | None]:
+    if execution is None or order.reduce_only or order.quote_amount <= 0:
+        return order, None
+    probe = indicators.get("trade_learning_quality_probe")
+    if not isinstance(probe, dict) or probe.get("approved") is not True:
+        return order, None
+    try:
+        minimum = min_open_quote_for_exchange(order, execution)
+    except Exception:
+        return order, None
+    if minimum <= 0 or order.quote_amount >= minimum:
+        return order, None
+    if minimum > risk.max_trade_quote:
+        return order, None
+    adjusted = resize_order_quote(order, minimum)
+    return adjusted, f"Quality probe raised to exchange minimum: quote {adjusted.quote_amount} USDT."
 
 
 def is_full_close(strategy: StrategyConfig, auto_exec: AutoExecutionConfig, close_qty: Decimal, position_qty: Decimal) -> bool:
@@ -2881,6 +2922,17 @@ def apply_risk_controls(
                 f"Max concurrent positions {risk.max_concurrent_positions} reached "
                 f"({open_count} open); concentrate margin on existing book."
             )
+
+    if order and not order.reduce_only:
+        adjusted_order, min_quote_reason = maybe_raise_quality_probe_to_exchange_minimum(
+            order,
+            execution=execution,
+            risk=risk,
+            indicators=indicators,
+        )
+        if min_quote_reason:
+            order = adjusted_order
+            reasons.append(min_quote_reason)
 
     if order and not order.reduce_only:
         from entry_economics import discovery_short_block_reason, entry_economics_block_reason

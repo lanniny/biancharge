@@ -349,6 +349,110 @@ def test_low_win_rate_uses_shadow_first_not_hard_block(tmp_path: Path):
     assert "reduced-size probe" in shadow_reason
 
 
+def test_quality_probe_scores_borderline_but_aligned_setup(tmp_path: Path):
+    cfg = trade_learning_from_config(
+        {
+            "enabled": True,
+            "quality_probe_min_score": "0.78",
+            "quality_probe_min_confidence": "0.92",
+            "quality_probe_long_max_rsi": "70",
+        }
+    )
+    probe = evaluate_learning_quality_probe(
+        {
+            "enabled": True,
+            "sampleSize": 20,
+            "winRate": "0.25",
+            "profitFactor": "0.30",
+            "totalRealizedPnl": "-3",
+        },
+        symbol="EDGEUSDT",
+        cfg=cfg,
+        action="BUY",
+        confidence=Decimal("0.90"),
+        indicators={
+            "fusion_bull_pct": "0.90",
+            "mtf_1m": "bullish",
+            "mtf_5m": "bullish",
+            "mtf_15m": "bullish",
+            "momentum": "0.010",
+            "price_change_pct_24h": "0.04",
+            "volume_ratio": "1.20",
+            "rsi": "72",
+        },
+        bucket="futuresTopVolume",
+        source="discovery:futuresTopVolume",
+        is_discovery_open=True,
+    )
+
+    assert probe.active is True
+    assert probe.approved is True
+    assert "score=" in probe.reason
+    assert probe.size_factor == Decimal("0.35")
+
+
+def test_quality_probe_keeps_unconfirmed_5m_blocked():
+    cfg = trade_learning_from_config({"enabled": True})
+    probe = evaluate_learning_quality_probe(
+        {
+            "enabled": True,
+            "sampleSize": 20,
+            "winRate": "0.25",
+            "profitFactor": "0.30",
+            "totalRealizedPnl": "-3",
+        },
+        symbol="WAITUSDT",
+        cfg=cfg,
+        action="BUY",
+        confidence=Decimal("0.99"),
+        indicators={
+            "fusion_bull_pct": "0.95",
+            "mtf_1m": "bullish",
+            "mtf_5m": "neutral",
+            "mtf_15m": "bullish",
+            "momentum": "0.010",
+            "price_change_pct_24h": "0.04",
+            "volume_ratio": "1.30",
+            "rsi": "58",
+        },
+    )
+
+    assert probe.active is True
+    assert probe.approved is False
+    assert "requires 5m bullish" in probe.reason
+
+
+def test_quality_probe_keeps_extreme_rsi_blocked():
+    cfg = trade_learning_from_config({"enabled": True})
+    probe = evaluate_learning_quality_probe(
+        {
+            "enabled": True,
+            "sampleSize": 20,
+            "winRate": "0.25",
+            "profitFactor": "0.30",
+            "totalRealizedPnl": "-3",
+        },
+        symbol="HOTUSDT",
+        cfg=cfg,
+        action="BUY",
+        confidence=Decimal("0.99"),
+        indicators={
+            "fusion_bull_pct": "0.95",
+            "mtf_1m": "bullish",
+            "mtf_5m": "bullish",
+            "mtf_15m": "bullish",
+            "momentum": "0.010",
+            "price_change_pct_24h": "0.04",
+            "volume_ratio": "1.30",
+            "rsi": "76",
+        },
+    )
+
+    assert probe.active is True
+    assert probe.approved is False
+    assert "outside learning range" in probe.reason
+
+
 def test_low_win_rate_does_not_block_non_discovery(tmp_path: Path):
     outcomes = tmp_path / "outcomes.jsonl"
     cfg = trade_learning_from_config(

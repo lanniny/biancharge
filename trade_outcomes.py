@@ -101,6 +101,11 @@ class TradeLearningConfig:
     quality_probe_long_max_rsi: Decimal = Decimal("70")
     quality_probe_short_min_rsi: Decimal = Decimal("30")
     quality_probe_short_max_rsi: Decimal = Decimal("58")
+    quality_probe_min_score: Decimal = Decimal("0.78")
+    quality_probe_confidence_grace: Decimal = Decimal("0.03")
+    quality_probe_fusion_grace: Decimal = Decimal("0.05")
+    quality_probe_volume_ratio_grace: Decimal = Decimal("0.10")
+    quality_probe_rsi_grace: Decimal = Decimal("4")
 
 
 @dataclass(frozen=True)
@@ -196,6 +201,11 @@ def trade_learning_from_config(raw: dict[str, Any] | None) -> TradeLearningConfi
         quality_probe_long_max_rsi=decimal_from(raw.get("quality_probe_long_max_rsi", "70")),
         quality_probe_short_min_rsi=decimal_from(raw.get("quality_probe_short_min_rsi", "30")),
         quality_probe_short_max_rsi=decimal_from(raw.get("quality_probe_short_max_rsi", "58")),
+        quality_probe_min_score=decimal_from(raw.get("quality_probe_min_score", "0.78")),
+        quality_probe_confidence_grace=decimal_from(raw.get("quality_probe_confidence_grace", "0.03")),
+        quality_probe_fusion_grace=decimal_from(raw.get("quality_probe_fusion_grace", "0.05")),
+        quality_probe_volume_ratio_grace=decimal_from(raw.get("quality_probe_volume_ratio_grace", "0.10")),
+        quality_probe_rsi_grace=decimal_from(raw.get("quality_probe_rsi_grace", "4")),
     )
 
 
@@ -1076,14 +1086,6 @@ def evaluate_learning_quality_probe(
     if not pressures:
         return LearningQualityProbe(False, True, "no adverse learning pressure")
 
-    if confidence < cfg.quality_probe_min_confidence:
-        return LearningQualityProbe(
-            True,
-            False,
-            f"confidence {confidence} < learning quality minimum {cfg.quality_probe_min_confidence}",
-            pressures=pressures,
-        )
-
     mtf_1m = str(indicators.get("mtf_1m") or "").lower()
     mtf_5m = str(indicators.get("mtf_5m") or "").lower()
     mtf_15m = str(indicators.get("mtf_15m") or "").lower()
@@ -1096,42 +1098,138 @@ def evaluate_learning_quality_probe(
         return LearningQualityProbe(True, False, f"momentum {momentum:.2%} exceeds learning quality limit", pressures=pressures)
     if abs(change_24h) > cfg.quality_probe_max_abs_24h_change:
         return LearningQualityProbe(True, False, f"24h change {change_24h:.2%} exceeds learning quality limit", pressures=pressures)
-    if volume_ratio < cfg.quality_probe_min_volume_ratio:
-        return LearningQualityProbe(True, False, f"volume ratio {volume_ratio} < {cfg.quality_probe_min_volume_ratio}", pressures=pressures)
+
+    confidence_floor = cfg.quality_probe_min_confidence - max(cfg.quality_probe_confidence_grace, Decimal("0"))
+    volume_floor = cfg.quality_probe_min_volume_ratio - max(cfg.quality_probe_volume_ratio_grace, Decimal("0"))
+    fusion_floor = cfg.quality_probe_min_fusion_pct - max(cfg.quality_probe_fusion_grace, Decimal("0"))
+    if confidence < confidence_floor:
+        return LearningQualityProbe(
+            True,
+            False,
+            f"confidence {confidence} < learning quality floor {confidence_floor}",
+            pressures=pressures,
+        )
+    if volume_ratio < volume_floor:
+        return LearningQualityProbe(True, False, f"volume ratio {volume_ratio} < learning quality floor {volume_floor}", pressures=pressures)
+
+    def score_floor(value: Decimal, minimum: Decimal, floor: Decimal, full_span: Decimal) -> Decimal:
+        if value >= minimum + full_span:
+            return Decimal("1")
+        if value >= minimum:
+            return Decimal("0.80") + (value - minimum) / full_span * Decimal("0.20") if full_span > 0 else Decimal("0.80")
+        if value < floor:
+            return Decimal("0")
+        span = minimum - floor
+        return ((value - floor) / span * Decimal("0.60")) if span > 0 else Decimal("0")
+
+    def score_rsi(value: Decimal, low: Decimal, high: Decimal) -> tuple[Decimal, str | None]:
+        if value <= 0:
+            return Decimal("0"), "RSI unavailable"
+        grace = max(cfg.quality_probe_rsi_grace, Decimal("0"))
+        if value < low - grace or value > high + grace:
+            return Decimal("0"), f"RSI {value} outside learning range {low}-{high} with grace {grace}"
+        if low <= value <= high:
+            return Decimal("1"), None
+        return Decimal("0.55"), None
+
+    score = Decimal("0")
+    score += Decimal("0.22") * score_floor(
+        confidence,
+        cfg.quality_probe_min_confidence,
+        confidence_floor,
+        Decimal("0.05"),
+    )
+    score += Decimal("0.10") * score_floor(
+        volume_ratio,
+        cfg.quality_probe_min_volume_ratio,
+        volume_floor,
+        Decimal("0.25"),
+    )
 
     if action == "BUY":
         fusion = decimal_from(indicators.get("fusion_bull_pct", "0") or "0")
-        if fusion < cfg.quality_probe_min_fusion_pct:
-            return LearningQualityProbe(True, False, f"bull fusion {fusion} < {cfg.quality_probe_min_fusion_pct}", pressures=pressures)
+        if fusion < fusion_floor:
+            return LearningQualityProbe(True, False, f"bull fusion {fusion} < learning quality floor {fusion_floor}", pressures=pressures)
         if cfg.quality_probe_require_5m_alignment and mtf_5m != "bullish":
             return LearningQualityProbe(True, False, f"long learning probe requires 5m bullish (got {mtf_5m or 'neutral'})", pressures=pressures)
         if cfg.quality_probe_require_15m_not_against and mtf_15m == "bearish":
             return LearningQualityProbe(True, False, "long learning probe blocked by bearish 15m", pressures=pressures)
         if cfg.quality_probe_require_1m_not_against and mtf_1m == "bearish":
             return LearningQualityProbe(True, False, "long learning probe blocked by bearish 1m", pressures=pressures)
-        if not (cfg.quality_probe_long_min_rsi <= rsi <= cfg.quality_probe_long_max_rsi):
-            return LearningQualityProbe(True, False, f"long RSI {rsi} outside learning range", pressures=pressures)
+        rsi_score, rsi_block = score_rsi(rsi, cfg.quality_probe_long_min_rsi, cfg.quality_probe_long_max_rsi)
+        if rsi_block:
+            return LearningQualityProbe(True, False, f"long {rsi_block}", pressures=pressures)
+        score += Decimal("0.23") * score_floor(
+            fusion,
+            cfg.quality_probe_min_fusion_pct,
+            fusion_floor,
+            Decimal("0.15"),
+        )
+        score += Decimal("0.18")
+        if mtf_15m == "bullish":
+            score += Decimal("0.08")
+        elif mtf_15m in {"neutral", ""}:
+            score += Decimal("0.04")
+        if mtf_1m == "bullish":
+            score += Decimal("0.06")
+        elif mtf_1m in {"neutral", ""}:
+            score += Decimal("0.03")
+        score += Decimal("0.08") * rsi_score
+        if momentum > 0:
+            score += Decimal("0.05")
+        elif momentum >= Decimal("-0.002"):
+            score += Decimal("0.02")
     elif action == "SELL":
         fusion = decimal_from(indicators.get("fusion_bear_pct", "0") or "0")
-        if fusion < cfg.quality_probe_min_fusion_pct:
-            return LearningQualityProbe(True, False, f"bear fusion {fusion} < {cfg.quality_probe_min_fusion_pct}", pressures=pressures)
+        if fusion < fusion_floor:
+            return LearningQualityProbe(True, False, f"bear fusion {fusion} < learning quality floor {fusion_floor}", pressures=pressures)
         if cfg.quality_probe_require_5m_alignment and mtf_5m != "bearish":
             return LearningQualityProbe(True, False, f"short learning probe requires 5m bearish (got {mtf_5m or 'neutral'})", pressures=pressures)
         if cfg.quality_probe_require_15m_not_against and mtf_15m == "bullish":
             return LearningQualityProbe(True, False, "short learning probe blocked by bullish 15m", pressures=pressures)
         if cfg.quality_probe_require_1m_not_against and mtf_1m == "bullish":
             return LearningQualityProbe(True, False, "short learning probe blocked by bullish 1m", pressures=pressures)
-        if not (cfg.quality_probe_short_min_rsi <= rsi <= cfg.quality_probe_short_max_rsi):
-            return LearningQualityProbe(True, False, f"short RSI {rsi} outside learning range", pressures=pressures)
+        rsi_score, rsi_block = score_rsi(rsi, cfg.quality_probe_short_min_rsi, cfg.quality_probe_short_max_rsi)
+        if rsi_block:
+            return LearningQualityProbe(True, False, f"short {rsi_block}", pressures=pressures)
+        score += Decimal("0.23") * score_floor(
+            fusion,
+            cfg.quality_probe_min_fusion_pct,
+            fusion_floor,
+            Decimal("0.15"),
+        )
+        score += Decimal("0.18")
+        if mtf_15m == "bearish":
+            score += Decimal("0.08")
+        elif mtf_15m in {"neutral", ""}:
+            score += Decimal("0.04")
+        if mtf_1m == "bearish":
+            score += Decimal("0.06")
+        elif mtf_1m in {"neutral", ""}:
+            score += Decimal("0.03")
+        score += Decimal("0.08") * rsi_score
+        if momentum < 0:
+            score += Decimal("0.05")
+        elif momentum <= Decimal("0.002"):
+            score += Decimal("0.02")
     else:
         return LearningQualityProbe(True, False, f"unsupported learning quality action {action}", pressures=pressures)
+
+    score = min(score, Decimal("1"))
+    if score < cfg.quality_probe_min_score:
+        return LearningQualityProbe(
+            True,
+            False,
+            f"learning quality score {score.quantize(Decimal('0.01'))} < {cfg.quality_probe_min_score}",
+            pressures=pressures,
+        )
 
     factor = min(max(cfg.quality_probe_factor, Decimal("0.05")), Decimal("1"))
     factor = factor.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
     return LearningQualityProbe(
         True,
         True,
-        "learning pressure accepted only as high-quality reduced-size probe",
+        f"learning pressure accepted as scored reduced-size probe (score={score.quantize(Decimal('0.01'))})",
         factor,
         pressures,
     )
