@@ -3579,6 +3579,40 @@ def fetch_live_portfolio(execution: ExecutionConfig, assets: list[AssetConfig]) 
 _SYMBOL_FILTER_CACHE: dict[str, dict[str, Decimal]] = {}
 _SERVER_TIME_OFFSET_MS: int | None = None
 _HEDGE_MODE_CACHE: bool | None = None
+_RUNTIME_FINGERPRINT_CACHE: dict[str, Any] | None = None
+
+
+def runtime_fingerprint() -> dict[str, Any]:
+    """Small runtime fingerprint for verifying which source a live process loaded."""
+    global _RUNTIME_FINGERPRINT_CACHE
+    if _RUNTIME_FINGERPRINT_CACHE is not None:
+        return dict(_RUNTIME_FINGERPRINT_CACHE)
+    source_path = Path(__file__).resolve()
+    try:
+        source_sha = hashlib.sha256(source_path.read_bytes()).hexdigest()[:16]
+    except OSError:
+        source_sha = "unavailable"
+    commit = os.environ.get("MARKET_AUTOTRADER_COMMIT", "").strip()
+    if not commit:
+        for git_dir in (source_path.parent / ".git", Path("/tmp/biancharge-upload/.git")):
+            head = git_dir / "HEAD"
+            try:
+                raw_head = head.read_text(encoding="utf-8").strip()
+                if raw_head.startswith("ref:"):
+                    ref_path = git_dir / raw_head.split(" ", 1)[1]
+                    commit = ref_path.read_text(encoding="utf-8").strip()[:12]
+                else:
+                    commit = raw_head[:12]
+                if commit:
+                    break
+            except OSError:
+                continue
+    _RUNTIME_FINGERPRINT_CACHE = {
+        "sourceFile": source_path.name,
+        "sourceSha": source_sha,
+        "commit": commit or "unknown",
+    }
+    return dict(_RUNTIME_FINGERPRINT_CACHE)
 
 
 def fetch_futures_hedge_mode(execution: ExecutionConfig) -> bool:
@@ -5433,7 +5467,10 @@ def record_to_json(record: ExecutionRecord) -> str:
             return [convert(item) for item in value]
         return value
 
-    return json.dumps(convert(asdict(record)), ensure_ascii=False, sort_keys=True)
+    payload = convert(asdict(record))
+    if isinstance(payload, dict):
+        payload.setdefault("runtime", runtime_fingerprint())
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
 def record_to_stdout_json(record: ExecutionRecord) -> str:

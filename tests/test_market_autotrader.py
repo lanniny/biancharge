@@ -729,6 +729,9 @@ class MarketAutotraderTests(unittest.TestCase):
         payload = json.loads(record_to_json(record))
 
         self.assertIsInstance(payload["price"], str)
+        self.assertIn("runtime", payload)
+        self.assertEqual(payload["runtime"]["sourceFile"], "market_autotrader.py")
+        self.assertRegex(payload["runtime"]["sourceSha"], r"^[0-9a-f]{16}$")
 
 
 class F4LongLosersGateTests(unittest.TestCase):
