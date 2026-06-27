@@ -172,7 +172,9 @@ def exit_quality_threshold_mult(
     if int(quality.get("sampleSize", 0)) < min_sample:
         return Decimal("1")
     capture = _dec(quality.get("avgCaptureRatio", "0"))
-    if capture > 0 and capture < low_capture:
+    has_mfe = quality.get("avgMfePct") not in (None, "")
+    avg_mfe = _dec(quality.get("avgMfePct", "0"))
+    if capture < low_capture and (avg_mfe > 0 or (capture > 0 and not has_mfe)):
         return Decimal("0.80")
     return Decimal("1")
 

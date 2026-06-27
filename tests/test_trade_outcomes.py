@@ -875,6 +875,63 @@ class TradeOutcomeUnittestCoverage(unittest.TestCase):
         )
         self.assertEqual(factor, Decimal("0.80"))
 
+    def test_fast_exit_quality_tightens_before_normal_sample_floor(self) -> None:
+        cfg = trade_learning_from_config(
+            {
+                "enabled": True,
+                "min_exit_quality_sample": 4,
+                "fast_exit_quality_enabled": True,
+                "fast_exit_quality_min_sample": 1,
+                "fast_exit_quality_min_mfe_pct": "0.01",
+                "fast_exit_quality_max_capture_ratio": "0",
+                "low_capture_exit_mult": "0.80",
+            }
+        )
+        factor = resolve_exit_quality_factor(
+            {"sampleSize": 2, "avgCaptureRatio": "-2.37", "avgMfePct": "0.0118"},
+            cfg,
+        )
+        self.assertEqual(factor, Decimal("0.80"))
+
+    def test_fast_exit_quality_snapshot_factor_for_giveback_bucket(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            outcomes = tmp_path / "outcomes.jsonl"
+            cfg = trade_learning_from_config(
+                {
+                    "enabled": True,
+                    "outcomes_path": str(outcomes),
+                    "state_path": str(tmp_path / "state.json"),
+                    "min_exit_quality_sample": 4,
+                    "fast_exit_quality_enabled": True,
+                    "fast_exit_quality_min_sample": 1,
+                    "fast_exit_quality_min_mfe_pct": "0.01",
+                    "low_capture_exit_mult": "0.80",
+                }
+            )
+            for symbol, exit_price in (("O1USDT", "98"), ("O2USDT", "98")):
+                record_trade_outcome(
+                    cfg,
+                    symbol=symbol,
+                    side="SELL",
+                    quantity=Decimal("1"),
+                    exit_price=Decimal(exit_price),
+                    entry_price=Decimal("100"),
+                    position_side="LONG",
+                    regime="trend_up",
+                    session=None,
+                    rationale_summary=None,
+                    open_context={
+                        "bucket": "futuresLosers",
+                        "source": "discovery:futuresLosers",
+                        "mfePct": "0.018",
+                        "maePct": "-0.012",
+                    },
+                )
+
+            snapshot = compute_trade_learning_snapshot(cfg)
+            self.assertEqual(snapshot["bucketExitQualityFactors"]["futuresLosers"], "0.80")
+
     def test_fast_bucket_shadow_first_after_two_large_losses(self) -> None:
         cfg = trade_learning_from_config(
             {

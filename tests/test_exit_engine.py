@@ -127,6 +127,44 @@ class ExitEngineTests(unittest.TestCase):
         self.assertEqual(out.action, SELL)
         self.assertEqual(out.indicators.get("exit_tier"), "early")
 
+    def test_exit_quality_negative_capture_accelerates_early_take(self) -> None:
+        portfolio = PaperPortfolio(
+            cash={"USDT_FUTURES": Decimal("1000")},
+            positions={"TESTUSDT": Position(quantity=Decimal("10"), average_price=Decimal("100"))},
+        )
+        memory = TradingMemory()
+        memory.position_open_context["TESTUSDT"] = {"bucket": "futuresLosers", "source": "discovery:futuresLosers"}
+        signal = Signal(
+            action=HOLD,
+            confidence=Decimal("0.5"),
+            reasons=[],
+            warnings=[],
+            indicators={"regime": "range", "momentum": "0", "mtf_5m": "neutral"},
+        )
+        learning = {
+            "enabled": True,
+            "bucketStats": {
+                "futuresLosers": {
+                    "exitQuality": {
+                        "sampleSize": 4,
+                        "avgCaptureRatio": "-2.37",
+                        "avgMfePct": "0.0118",
+                    }
+                }
+            },
+        }
+        strategy = StrategyConfig(trade_horizon="swing", holding_early_take_pct=Decimal("0.03"))
+        out = apply_holding_priority_signal(
+            _snapshot(price="103.7"),
+            signal,
+            strategy,
+            portfolio,
+            memory,
+            trade_learning=learning,
+        )
+        self.assertEqual(out.action, SELL)
+        self.assertEqual(out.indicators.get("exit_tier"), "early")
+
     def test_exit_quality_sample_floor_keeps_default_thresholds(self) -> None:
         learning = {
             "enabled": True,

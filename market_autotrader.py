@@ -2707,6 +2707,8 @@ def apply_risk_controls(
             is_discovery_open=is_discovery_open,
         )
         if shadow_first and shadow_reason:
+            indicators["trade_learning_shadow_first"] = "true"
+            indicators["trade_learning_shadow_reason"] = shadow_reason
             reasons.append(f"{shadow_reason} Live deferred to shadow paper.")
 
     from bucket_strategy import bucket_open_block_reasons, bucket_strategy_from_config

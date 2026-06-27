@@ -63,6 +63,10 @@ class TradeLearningConfig:
     high_capture_exit_mult: Decimal = Decimal("1.10")
     min_exit_quality_mult: Decimal = Decimal("0.75")
     max_exit_quality_mult: Decimal = Decimal("1.15")
+    fast_exit_quality_enabled: bool = True
+    fast_exit_quality_min_sample: int = 1
+    fast_exit_quality_min_mfe_pct: Decimal = Decimal("0.01")
+    fast_exit_quality_max_capture_ratio: Decimal = Decimal("0")
     fast_bucket_shadow_enabled: bool = True
     fast_bucket_min_sample: int = 2
     fast_bucket_total_loss: Decimal = Decimal("-1.0")
@@ -116,6 +120,10 @@ def trade_learning_from_config(raw: dict[str, Any] | None) -> TradeLearningConfi
         high_capture_exit_mult=decimal_from(raw.get("high_capture_exit_mult", "1.10")),
         min_exit_quality_mult=decimal_from(raw.get("min_exit_quality_mult", "0.75")),
         max_exit_quality_mult=decimal_from(raw.get("max_exit_quality_mult", "1.15")),
+        fast_exit_quality_enabled=bool(raw.get("fast_exit_quality_enabled", True)),
+        fast_exit_quality_min_sample=int(raw.get("fast_exit_quality_min_sample", 1)),
+        fast_exit_quality_min_mfe_pct=decimal_from(raw.get("fast_exit_quality_min_mfe_pct", "0.01")),
+        fast_exit_quality_max_capture_ratio=decimal_from(raw.get("fast_exit_quality_max_capture_ratio", "0")),
         fast_bucket_shadow_enabled=bool(raw.get("fast_bucket_shadow_enabled", True)),
         fast_bucket_min_sample=int(raw.get("fast_bucket_min_sample", 2)),
         fast_bucket_total_loss=decimal_from(raw.get("fast_bucket_total_loss", "-1.0")),
@@ -388,10 +396,17 @@ def resolve_exit_quality_factor(quality: dict[str, Any], cfg: TradeLearningConfi
     if not cfg.exit_quality_enabled:
         return Decimal("1")
     sample = int(quality.get("sampleSize", 0))
-    if sample < cfg.min_exit_quality_sample:
-        return Decimal("1")
     capture = decimal_from(quality.get("avgCaptureRatio", "0"))
     avg_mfe = decimal_from(quality.get("avgMfePct", "0"))
+    if (
+        cfg.fast_exit_quality_enabled
+        and sample >= cfg.fast_exit_quality_min_sample
+        and avg_mfe >= cfg.fast_exit_quality_min_mfe_pct
+        and capture <= cfg.fast_exit_quality_max_capture_ratio
+    ):
+        return min(max(cfg.low_capture_exit_mult, cfg.min_exit_quality_mult), cfg.max_exit_quality_mult)
+    if sample < cfg.min_exit_quality_sample:
+        return Decimal("1")
     if avg_mfe > 0 and capture < cfg.low_capture_ratio:
         factor = cfg.low_capture_exit_mult
     elif capture >= cfg.high_capture_ratio and avg_mfe >= cfg.high_mfe_pct:
