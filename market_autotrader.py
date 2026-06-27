@@ -4761,6 +4761,7 @@ def execute_live_order(
                         order_id=payload.get("orderId"),
                         close_source="agent_reduce",
                         open_context=open_context_with_excursion(memory, symbol),
+                        fees=commission,
                     )
                     if outcome:
                         details["tradeOutcome"] = outcome

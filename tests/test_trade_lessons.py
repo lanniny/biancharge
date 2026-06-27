@@ -360,6 +360,33 @@ class TradeLessonsUnittestCoverage(unittest.TestCase):
 
         self.assertEqual(lesson_rule_status(stat, cfg), "allowed_profitable_edge")
 
+    def test_lessons_document_prefers_net_pnl_over_gross_realized_pnl(self) -> None:
+        cfg = trade_lessons_from_config({"enabled": True, "min_lesson_sample_for_block": 12})
+        doc = build_lessons_document(
+            [
+                {
+                    "symbol": "COSTUSDT",
+                    "positionSide": "LONG",
+                    "realizedPnl": "0.1000",
+                    "netPnl": "-0.0500",
+                    "openContext": {
+                        "bucket": "futuresGainers",
+                        "regime": "trend_up",
+                        "priceChangePct24h": "0.20",
+                        "momentum": "0.001",
+                        "confidence": "0.80",
+                        "rsi": "55",
+                    },
+                }
+            ],
+            cfg,
+        )
+
+        self.assertEqual(doc["summary"]["wins"], 0)
+        self.assertEqual(doc["summary"]["losses"], 1)
+        self.assertEqual(doc["summary"]["totalPnl"], "-0.0500")
+        self.assertEqual(doc["ruleStats"]["long_chase_gainer_weak_momentum"]["totalPnl"], "-0.0500")
+
     def test_high_confidence_loser_long_bypass_disabled_for_confirmed_negative_edge(self) -> None:
         cfg = trade_lessons_from_config(
             {

@@ -11,6 +11,7 @@ from trade_outcomes import (
     apply_bucket_sizing_factor,
     apply_sizing_factor,
     compute_trade_learning_snapshot,
+    outcome_pnl,
     record_trade_outcome,
     required_confidence_with_learning,
     resolve_discovery_live_mode,
@@ -120,6 +121,61 @@ def test_short_pnl_sign(tmp_path: Path):
         rationale_summary=None,
     )
     assert Decimal(row["realizedPnl"]) == Decimal("10.0")
+
+
+def test_record_trade_outcome_stores_net_pnl_after_costs(tmp_path: Path):
+    outcomes = tmp_path / "out.jsonl"
+    cfg = trade_learning_from_config({"enabled": True, "outcomes_path": str(outcomes)})
+
+    row = record_trade_outcome(
+        cfg,
+        symbol="COSTUSDT",
+        side="SELL",
+        quantity=Decimal("1"),
+        exit_price=Decimal("10.10"),
+        entry_price=Decimal("10"),
+        position_side="LONG",
+        regime=None,
+        session=None,
+        rationale_summary=None,
+        fees=Decimal("0.15"),
+    )
+
+    assert row["grossPnl"] == "0.1000"
+    assert row["netPnl"] == "-0.0500"
+    assert outcome_pnl(row) == Decimal("-0.0500")
+
+
+def test_learning_stats_prefer_net_pnl_over_gross(tmp_path: Path):
+    outcomes = tmp_path / "outcomes.jsonl"
+    cfg = trade_learning_from_config(
+        {
+            "enabled": True,
+            "outcomes_path": str(outcomes),
+            "state_path": str(tmp_path / "state.json"),
+            "loss_streak_cooldown": 1,
+        }
+    )
+    record_trade_outcome(
+        cfg,
+        symbol="COSTUSDT",
+        side="SELL",
+        quantity=Decimal("1"),
+        exit_price=Decimal("10.10"),
+        entry_price=Decimal("10"),
+        position_side="LONG",
+        regime="range",
+        session=None,
+        rationale_summary=None,
+        fees=Decimal("0.15"),
+    )
+
+    snapshot = compute_trade_learning_snapshot(cfg)
+
+    assert snapshot["wins"] == 0
+    assert snapshot["losses"] == 1
+    assert snapshot["totalRealizedPnl"] == "-0.0500"
+    assert trade_learning_block_reason(snapshot, symbol="COSTUSDT", is_reduce_only=False, cfg=cfg) is not None
 
 
 def _record_with_bucket(

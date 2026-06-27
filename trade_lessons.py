@@ -123,12 +123,12 @@ def lesson_rule_ids_for_outcome(row: dict[str, Any], cfg: TradeLessonsConfig | N
 
 
 def _edge_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    wins = sum(1 for row in rows if decimal_from(row.get("realizedPnl", "0")) > 0)
-    losses = sum(1 for row in rows if decimal_from(row.get("realizedPnl", "0")) < 0)
+    wins = sum(1 for row in rows if _outcome_pnl(row) > 0)
+    losses = sum(1 for row in rows if _outcome_pnl(row) < 0)
     total = len(rows)
-    total_pnl = sum((decimal_from(row.get("realizedPnl", "0")) for row in rows), Decimal("0"))
-    gross_win = sum((decimal_from(row.get("realizedPnl", "0")) for row in rows if decimal_from(row.get("realizedPnl", "0")) > 0), Decimal("0"))
-    gross_loss = abs(sum((decimal_from(row.get("realizedPnl", "0")) for row in rows if decimal_from(row.get("realizedPnl", "0")) < 0), Decimal("0")))
+    total_pnl = sum((_outcome_pnl(row) for row in rows), Decimal("0"))
+    gross_win = sum((_outcome_pnl(row) for row in rows if _outcome_pnl(row) > 0), Decimal("0"))
+    gross_loss = abs(sum((_outcome_pnl(row) for row in rows if _outcome_pnl(row) < 0), Decimal("0")))
     win_rate = Decimal(wins) / Decimal(total) if total else Decimal("0")
     profit_factor = gross_win / gross_loss if gross_loss > 0 else (Decimal("999") if gross_win > 0 else Decimal("0"))
     expectancy = total_pnl / Decimal(total) if total else Decimal("0")
@@ -143,6 +143,12 @@ def _edge_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "profitFactor": str(profit_factor.quantize(Decimal("0.01"))),
         "expectancyPnl": str(expectancy.quantize(Decimal("0.0001"))),
     }
+
+
+def _outcome_pnl(row: dict[str, Any]) -> Decimal:
+    if row.get("netPnl") not in (None, ""):
+        return decimal_from(row.get("netPnl", "0"))
+    return decimal_from(row.get("realizedPnl", "0"))
 
 
 def _has_profitable_edge(stat: dict[str, Any], *, min_profit_factor: Decimal) -> bool:
@@ -177,7 +183,7 @@ def _tag_outcome(row: dict[str, Any]) -> list[str]:
     conf = decimal_from(ctx.get("confidence"))
     rsi = decimal_from(ctx.get("rsi"))
     momentum = decimal_from(ctx.get("momentum"))
-    pnl = decimal_from(row.get("realizedPnl", "0"))
+    pnl = _outcome_pnl(row)
 
     if "Gainers" in bucket or bucket == "futuresGainers":
         tags.append("discovery_gainer")
@@ -208,7 +214,7 @@ def _tag_outcome(row: dict[str, Any]) -> list[str]:
 
 def _lesson_text(row: dict[str, Any], tags: list[str]) -> str:
     sym = row.get("symbol", "?")
-    pnl = decimal_from(row.get("realizedPnl", "0"))
+    pnl = _outcome_pnl(row)
     ctx = row.get("openContext") or {}
     if pnl > 0:
         if "early_trend_long" in tags:
@@ -252,7 +258,7 @@ def build_lessons_document(outcomes: list[dict[str, Any]], cfg: TradeLessonsConf
             "tags": tags,
             "lesson": _lesson_text(row, tags),
         }
-        pnl = decimal_from(row.get("realizedPnl", "0"))
+        pnl = _outcome_pnl(row)
         if pnl > 0:
             wins.append(entry)
         elif pnl < 0:
@@ -292,7 +298,7 @@ def build_lessons_document(outcomes: list[dict[str, Any]], cfg: TradeLessonsConf
             "wins": len(wins),
             "losses": len(losses),
             "totalPnl": str(
-                sum((decimal_from(r.get("realizedPnl", "0")) for r in outcomes), Decimal("0")).quantize(
+                sum((_outcome_pnl(r) for r in outcomes), Decimal("0")).quantize(
                     Decimal("0.0001")
                 )
             ),

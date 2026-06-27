@@ -232,9 +232,16 @@ def outcome_bucket(row: dict[str, Any]) -> str:
     return "unknown"
 
 
+def outcome_pnl(row: dict[str, Any]) -> Decimal:
+    """Learning PnL: prefer netPnl when present, fall back to legacy realizedPnl."""
+    if row.get("netPnl") not in (None, ""):
+        return decimal_from(row.get("netPnl", "0"))
+    return decimal_from(row.get("realizedPnl", "0"))
+
+
 def _win_rate_for_rows(rows: list[dict[str, Any]]) -> tuple[int, int, int, Decimal]:
-    wins = sum(1 for row in rows if decimal_from(row.get("realizedPnl", "0")) > 0)
-    losses = sum(1 for row in rows if decimal_from(row.get("realizedPnl", "0")) < 0)
+    wins = sum(1 for row in rows if outcome_pnl(row) > 0)
+    losses = sum(1 for row in rows if outcome_pnl(row) < 0)
     total = len(rows)
     win_rate = Decimal(wins) / Decimal(total) if total else Decimal("0")
     return wins, losses, total, win_rate
@@ -296,17 +303,17 @@ def compute_bucket_stats(recent: list[dict[str, Any]]) -> dict[str, Any]:
     stats: dict[str, Any] = {}
     for bucket, rows in grouped.items():
         wins, losses, total, win_rate = _win_rate_for_rows(rows)
-        total_pnl = sum((decimal_from(row.get("realizedPnl", "0")) for row in rows), Decimal("0"))
+        total_pnl = sum((outcome_pnl(row) for row in rows), Decimal("0"))
         gross_win = sum(
-            (decimal_from(row.get("realizedPnl", "0")) for row in rows if decimal_from(row.get("realizedPnl", "0")) > 0),
+            (outcome_pnl(row) for row in rows if outcome_pnl(row) > 0),
             Decimal("0"),
         )
         gross_loss = abs(
             sum(
                 (
-                    decimal_from(row.get("realizedPnl", "0"))
+                    outcome_pnl(row)
                     for row in rows
-                    if decimal_from(row.get("realizedPnl", "0")) < 0
+                    if outcome_pnl(row) < 0
                 ),
                 Decimal("0"),
             )
@@ -402,17 +409,17 @@ def compute_trade_learning_snapshot(cfg: TradeLearningConfig) -> dict[str, Any]:
     rows = load_recent_outcomes(cfg.outcomes_path, limit=max(cfg.lookback_trades * 3, 30))
     recent = rows[-cfg.lookback_trades :] if rows else []
     wins, losses, total, win_rate = _win_rate_for_rows(recent)
-    total_pnl = sum((decimal_from(row.get("realizedPnl", "0")) for row in recent), Decimal("0"))
+    total_pnl = sum((outcome_pnl(row) for row in recent), Decimal("0"))
     gross_win = sum(
-        (decimal_from(row.get("realizedPnl", "0")) for row in recent if decimal_from(row.get("realizedPnl", "0")) > 0),
+        (outcome_pnl(row) for row in recent if outcome_pnl(row) > 0),
         Decimal("0"),
     )
     gross_loss = abs(
         sum(
             (
-                decimal_from(row.get("realizedPnl", "0"))
+                outcome_pnl(row)
                 for row in recent
-                if decimal_from(row.get("realizedPnl", "0")) < 0
+                if outcome_pnl(row) < 0
             ),
             Decimal("0"),
         )
@@ -432,12 +439,12 @@ def compute_trade_learning_snapshot(cfg: TradeLearningConfig) -> dict[str, Any]:
         tail = sym_rows[-5:]
         streak = 0
         for item in reversed(tail):
-            pnl = decimal_from(item.get("realizedPnl", "0"))
+            pnl = outcome_pnl(item)
             if pnl < 0:
                 streak += 1
             else:
                 break
-        sym_wins = sum(1 for item in tail if decimal_from(item.get("realizedPnl", "0")) > 0)
+        sym_wins = sum(1 for item in tail if outcome_pnl(item) > 0)
         symbol_stats[sym] = {
             "recentTrades": len(tail),
             "lossStreak": streak,
@@ -628,6 +635,9 @@ def record_trade_outcome(
     order_id: Any = None,
     close_source: str | None = None,
     open_context: dict[str, Any] | None = None,
+    fees: Decimal = Decimal("0"),
+    funding: Decimal = Decimal("0"),
+    slippage: Decimal = Decimal("0"),
 ) -> dict[str, Any]:
     if not cfg.enabled or quantity <= 0 or entry_price <= 0:
         return {}
@@ -636,6 +646,7 @@ def record_trade_outcome(
         pnl = (entry_price - exit_price) * quantity
     else:
         pnl = (exit_price - entry_price) * quantity
+    net_pnl = pnl - fees - funding - slippage
     row = {
         "symbol": sym,
         "side": side,
@@ -643,6 +654,11 @@ def record_trade_outcome(
         "quantity": str(quantity.quantize(Decimal("0.00000001"), rounding=ROUND_DOWN)),
         "entryPrice": str(entry_price),
         "exitPrice": str(exit_price),
+        "grossPnl": str(pnl.quantize(Decimal("0.0001"))),
+        "fees": str(fees.quantize(Decimal("0.0001"))),
+        "funding": str(funding.quantize(Decimal("0.0001"))),
+        "slippage": str(slippage.quantize(Decimal("0.0001"))),
+        "netPnl": str(net_pnl.quantize(Decimal("0.0001"))),
         "realizedPnl": str(pnl.quantize(Decimal("0.0001"))),
         "regime": regime,
         "session": session,
