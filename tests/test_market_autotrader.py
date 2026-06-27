@@ -216,6 +216,9 @@ class MarketAutotraderTests(unittest.TestCase):
             "mtf_15m": "neutral",
             "entry_quadrant": "trend_short",
             "entry_quadrant_mode": "live",
+            "trade_learning_shadow_canary": "true",
+            "trade_learning_shadow_canary_factor": "0.25",
+            "trade_learning_shadow_canary_reason": "shadow canary: edge recovered",
         }
         with_price = open_context_from_signal(
             signal_indicators=ind, confidence="0.99", discovery_meta={"source": "pinned"},
@@ -226,6 +229,8 @@ class MarketAutotraderTests(unittest.TestCase):
         self.assertEqual(with_price["mtf5m"], "bearish")
         self.assertEqual(with_price["entryQuadrant"], "trend_short")
         self.assertEqual(with_price["entryQuadrantMode"], "live")
+        self.assertEqual(with_price["tradeLearningShadowCanary"], "true")
+        self.assertEqual(with_price["tradeLearningShadowCanaryFactor"], "0.25")
 
         # Back-compat: no fill price -> no entryPrice key (reader falls back to avg).
         without_price = open_context_from_signal(

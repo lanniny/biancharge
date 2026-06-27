@@ -602,6 +602,106 @@ def test_shadow_canary_allows_small_live_probe_under_live_lock(tmp_path: Path):
     assert "shadow canary" in reason
 
 
+def test_shadow_canary_pauses_after_bad_live_probes(tmp_path: Path):
+    outcomes = tmp_path / "live-outcomes.jsonl"
+    shadow_outcomes = tmp_path / "shadow-outcomes.jsonl"
+    cfg = trade_learning_from_config(
+        {
+            "enabled": True,
+            "outcomes_path": str(outcomes),
+            "state_path": str(tmp_path / "state.json"),
+            "shadow_outcomes_path": str(shadow_outcomes),
+            "min_bucket_sample": 4,
+            "min_shadow_bucket_sample": 6,
+            "shadow_canary_min_sample": 6,
+            "shadow_canary_min_eval_sample": 3,
+            "shadow_canary_stop_total_pnl": "-0.75",
+            "shadow_canary_stop_profit_factor": "0.85",
+            "shadow_canary_max_live_sample": 10,
+        }
+    )
+    from shadow_paper import append_shadow_trade
+
+    for i, pnl in enumerate(["1", "1", "1", "-0.2", "-0.2", "-0.2"]):
+        append_shadow_trade(
+            str(shadow_outcomes),
+            {"symbol": f"SH{i}USDT", "realizedPnl": pnl, "bucket": "futuresLosers", "closedAt": 100 + i},
+        )
+    for i in range(3):
+        record_trade_outcome(
+            cfg,
+            symbol=f"CANBAD{i}USDT",
+            side="SELL",
+            quantity=Decimal("1"),
+            exit_price=Decimal("9.5"),
+            entry_price=Decimal("10"),
+            position_side="LONG",
+            regime="range",
+            session=None,
+            rationale_summary=None,
+            open_context={
+                "bucket": "futuresLosers",
+                "source": "discovery:futuresLosers",
+                "tradeLearningShadowCanary": "true",
+            },
+        )
+
+    snapshot = compute_trade_learning_snapshot(cfg)
+    assert "futuresLosers" not in snapshot["shadowCanaryBuckets"]
+    assert "futuresLosers" in snapshot["bucketCanaryPauses"]
+    assert snapshot["canaryStats"]["futuresLosers"]["sampleSize"] == 3
+
+
+def test_shadow_canary_success_raises_probe_factor(tmp_path: Path):
+    outcomes = tmp_path / "live-outcomes.jsonl"
+    shadow_outcomes = tmp_path / "shadow-outcomes.jsonl"
+    cfg = trade_learning_from_config(
+        {
+            "enabled": True,
+            "outcomes_path": str(outcomes),
+            "state_path": str(tmp_path / "state.json"),
+            "shadow_outcomes_path": str(shadow_outcomes),
+            "min_bucket_sample": 4,
+            "min_shadow_bucket_sample": 6,
+            "shadow_canary_min_sample": 6,
+            "shadow_canary_success_sample": 5,
+            "shadow_canary_success_profit_factor": "1.20",
+            "shadow_canary_success_win_rate": "0.45",
+            "shadow_canary_success_factor": "0.50",
+            "shadow_canary_max_live_sample": 10,
+        }
+    )
+    from shadow_paper import append_shadow_trade
+
+    for i, pnl in enumerate(["1", "1", "1", "-0.2", "-0.2", "-0.2"]):
+        append_shadow_trade(
+            str(shadow_outcomes),
+            {"symbol": f"SHG{i}USDT", "realizedPnl": pnl, "bucket": "futuresGainers", "closedAt": 100 + i},
+        )
+    for i, exit_price in enumerate(["11", "11", "11", "9.8", "9.8"]):
+        record_trade_outcome(
+            cfg,
+            symbol=f"CANGOOD{i}USDT",
+            side="SELL",
+            quantity=Decimal("1"),
+            exit_price=Decimal(exit_price),
+            entry_price=Decimal("10"),
+            position_side="LONG",
+            regime="range",
+            session=None,
+            rationale_summary=None,
+            open_context={
+                "bucket": "futuresGainers",
+                "source": "discovery:futuresGainers",
+                "tradeLearningShadowCanary": "true",
+            },
+        )
+
+    snapshot = compute_trade_learning_snapshot(cfg)
+    assert snapshot["bucketCanaryFactors"]["futuresGainers"] == "0.50"
+    assert snapshot["canaryStats"]["futuresGainers"]["sampleSize"] == 5
+
+
 def test_shadow_graduation_not_live_locked_when_live_bucket_is_profitable_edge(tmp_path: Path):
     outcomes = tmp_path / "live-outcomes.jsonl"
     shadow_outcomes = tmp_path / "shadow-outcomes.jsonl"

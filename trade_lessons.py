@@ -755,4 +755,14 @@ def open_context_from_signal(
     # price is known; readers fall back to average_price when it's absent.
     if entry_price is not None and str(entry_price) not in ("", "0"):
         ctx["entryPrice"] = str(entry_price)
+    if str(signal_indicators.get("trade_learning_shadow_canary", "")).lower() == "true":
+        ctx["tradeLearningShadowCanary"] = "true"
+        if signal_indicators.get("trade_learning_shadow_canary_factor") not in (None, ""):
+            ctx["tradeLearningShadowCanaryFactor"] = str(
+                signal_indicators.get("trade_learning_shadow_canary_factor")
+            )
+        if signal_indicators.get("trade_learning_shadow_canary_reason") not in (None, ""):
+            ctx["tradeLearningShadowCanaryReason"] = str(
+                signal_indicators.get("trade_learning_shadow_canary_reason")
+            )
     return ctx
