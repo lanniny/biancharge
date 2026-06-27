@@ -77,6 +77,86 @@ class MarketContextUnittestCoverage(unittest.TestCase):
         )
         self.assertIsNotNone(reason)
         self.assertIn("Session guard", reason)
+        self.assertIn("configured as a blocked open session", reason)
+
+    def test_dynamic_session_guard_requires_negative_sample(self) -> None:
+        ctx = {
+            "enabled": True,
+            "session": {"label": "欧盘", "primary": "europe"},
+        }
+        reason = market_context_block_reason(
+            ctx,
+            is_reduce_only=False,
+            block_pre_funding=False,
+            block_sessions=("europe",),
+            trade_learning={
+                "enabled": True,
+                "sessionStats": {
+                    "europe": {
+                        "sampleSize": 8,
+                        "winRate": "0.25",
+                        "profitFactor": "0.50",
+                        "totalPnl": "-1.2500",
+                    }
+                },
+            },
+            session_guard_dynamic_enabled=True,
+            session_guard_min_sample=6,
+        )
+        self.assertIsNotNone(reason)
+        self.assertIn("live edge weak", reason)
+
+    def test_dynamic_session_guard_does_not_block_small_sample(self) -> None:
+        ctx = {
+            "enabled": True,
+            "session": {"label": "欧盘", "primary": "europe"},
+        }
+        reason = market_context_block_reason(
+            ctx,
+            is_reduce_only=False,
+            block_pre_funding=False,
+            block_sessions=("europe",),
+            trade_learning={
+                "enabled": True,
+                "sessionStats": {
+                    "europe": {
+                        "sampleSize": 2,
+                        "winRate": "0.00",
+                        "profitFactor": "0.00",
+                        "totalPnl": "-0.2000",
+                    }
+                },
+            },
+            session_guard_dynamic_enabled=True,
+            session_guard_min_sample=6,
+        )
+        self.assertIsNone(reason)
+
+    def test_dynamic_session_guard_does_not_block_positive_edge(self) -> None:
+        ctx = {
+            "enabled": True,
+            "session": {"label": "重叠时段(欧盘/美盘)", "primary": "overlap_europe_us"},
+        }
+        reason = market_context_block_reason(
+            ctx,
+            is_reduce_only=False,
+            block_pre_funding=False,
+            block_sessions=("overlap_europe_us",),
+            trade_learning={
+                "enabled": True,
+                "sessionStats": {
+                    "overlap_europe_us": {
+                        "sampleSize": 8,
+                        "winRate": "0.25",
+                        "profitFactor": "1.10",
+                        "totalPnl": "0.0500",
+                    }
+                },
+            },
+            session_guard_dynamic_enabled=True,
+            session_guard_min_sample=6,
+        )
+        self.assertIsNone(reason)
 
     def test_session_guard_does_not_block_reduce_only(self) -> None:
         ctx = {

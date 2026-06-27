@@ -245,6 +245,12 @@
     "funding_guard_enabled": true,
     "funding_guard_minutes": 30,
     "block_new_opens_pre_funding": false,
+    "block_new_opens_sessions": [],
+    "session_guard_dynamic_enabled": true,
+    "session_guard_min_sample": 6,
+    "session_guard_max_win_rate": "0.30",
+    "session_guard_max_profit_factor": "0.85",
+    "session_guard_max_total_pnl": "0",
     "macro_btc_symbol": "BTCUSDT",
     "cache_seconds": 300,
     "snapshot_path": "logs/market-context-latest.json"

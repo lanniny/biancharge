@@ -2709,6 +2709,12 @@ def apply_risk_controls(
             is_reduce_only=order.reduce_only,
             block_pre_funding=market_context_cfg.block_new_opens_pre_funding,
             block_sessions=market_context_cfg.block_new_opens_sessions,
+            trade_learning=trade_learning,
+            session_guard_dynamic_enabled=market_context_cfg.session_guard_dynamic_enabled,
+            session_guard_min_sample=market_context_cfg.session_guard_min_sample,
+            session_guard_max_win_rate=market_context_cfg.session_guard_max_win_rate,
+            session_guard_max_profit_factor=market_context_cfg.session_guard_max_profit_factor,
+            session_guard_max_total_pnl=market_context_cfg.session_guard_max_total_pnl,
         )
         if ctx_reason and not order.reduce_only:
             blocked.append(ctx_reason)
@@ -4956,12 +4962,14 @@ def execute_live_order(
                 from trade_lessons import open_context_from_signal
 
                 md = (trade_rationale or {}).get("marketDiscovery") or {}
+                market_ctx = (trade_rationale or {}).get("marketContext") or {}
                 fill_entry_price = (quote_amount / quantity) if quantity > 0 and quote_amount > 0 else None
                 open_ctx_for_protection = open_context_from_signal(
                     signal_indicators=signal.indicators,
                     confidence=(trade_rationale or {}).get("confidence"),
                     discovery_meta=md,
                     entry_price=fill_entry_price,
+                    market_context=market_ctx,
                 )
                 memory.position_open_context[normalize_symbol(symbol)] = open_ctx_for_protection
                 memory.position_excursion[normalize_symbol(symbol)] = {"mfePct": "0", "maePct": "0"}

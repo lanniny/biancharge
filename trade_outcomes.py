@@ -472,6 +472,47 @@ def compute_bucket_stats(recent: list[dict[str, Any]]) -> dict[str, Any]:
     return stats
 
 
+SESSION_LABEL_TO_KEY = {
+    "亚盘": "asia",
+    "欧盘": "europe",
+    "美盘": "us",
+    "非主要时段": "off_hours",
+    "重叠时段(亚盘/欧盘)": "overlap_asia_europe",
+    "重叠时段(欧盘/美盘)": "overlap_europe_us",
+}
+
+
+def outcome_session(row: dict[str, Any]) -> str:
+    ctx = row.get("openContext") or {}
+    session = str(ctx.get("sessionPrimary") or ctx.get("session") or "").strip()
+    if not session:
+        session = str(row.get("session") or "").strip()
+    if not session:
+        return "unknown"
+    return SESSION_LABEL_TO_KEY.get(session, session)
+
+
+def compute_session_stats(recent: list[dict[str, Any]]) -> dict[str, Any]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    labels: dict[str, str] = {}
+    for row in recent:
+        session = outcome_session(row)
+        if session == "unknown":
+            continue
+        grouped.setdefault(session, []).append(row)
+        label = str((row.get("openContext") or {}).get("sessionLabel") or row.get("session") or "").strip()
+        if label:
+            labels[session] = label
+
+    stats: dict[str, Any] = {}
+    for session, rows in grouped.items():
+        stat = _format_trade_stat(rows)
+        if labels.get(session):
+            stat["label"] = labels[session]
+        stats[session] = stat
+    return stats
+
+
 def _format_trade_stat(rows: list[dict[str, Any]]) -> dict[str, Any]:
     wins, losses, total, win_rate = _win_rate_for_rows(rows)
     total_pnl = sum((outcome_pnl(row) for row in rows), Decimal("0"))
@@ -654,6 +695,7 @@ def compute_trade_learning_snapshot(cfg: TradeLearningConfig) -> dict[str, Any]:
         confidence_bump = cfg.min_confidence_bump
 
     bucket_stats = compute_bucket_stats(recent)
+    session_stats = compute_session_stats(recent)
     prev_bucket_modes = previous.get("bucketLiveModes") or {}
     bucket_live_modes: dict[str, str] = {}
     shadow_summary = load_shadow_outcome_summary(cfg)
@@ -780,6 +822,7 @@ def compute_trade_learning_snapshot(cfg: TradeLearningConfig) -> dict[str, Any]:
         "confidenceBump": str(confidence_bump),
         "symbolStats": symbol_stats,
         "bucketStats": bucket_stats,
+        "sessionStats": session_stats,
         "bucketSizingFactors": bucket_sizing_factors,
         "bucketExitQualityFactors": bucket_exit_quality_factors,
         "bucketCanaryFactors": bucket_canary_factors,
@@ -1197,6 +1240,7 @@ def trade_learning_rationale_block(snapshot: dict[str, Any]) -> dict[str, Any]:
         "exitQuality": snapshot.get("exitQuality"),
         "symbolStats": snapshot.get("symbolStats"),
         "bucketStats": snapshot.get("bucketStats"),
+        "sessionStats": snapshot.get("sessionStats"),
         "bucketSizingFactors": snapshot.get("bucketSizingFactors"),
         "bucketExitQualityFactors": snapshot.get("bucketExitQualityFactors"),
         "bucketCanaryFactors": snapshot.get("bucketCanaryFactors"),

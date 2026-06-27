@@ -704,6 +704,84 @@ class MarketAutotraderTests(unittest.TestCase):
         self.assertTrue(probe.get("approved"))
         self.assertTrue(any("quality probe" in reason for reason in decision.reasons))
 
+    def test_dynamic_session_guard_does_not_deadlock_small_sample(self) -> None:
+        from market_context import market_context_from_config
+
+        asset = AssetConfig(
+            symbol="BTCUSDT",
+            market="binance_futures",
+            base_asset="BTC",
+            quote_asset="USDT",
+            provider={},
+        )
+        snapshot = MarketSnapshot(asset=asset, bars=reasonable_buy_bars(), observed_at=1000)
+        signal = ma.Signal(
+            action=BUY,
+            confidence=Decimal("0.96"),
+            reasons=["strong"],
+            warnings=[],
+            indicators={
+                "atr_pct": "0.01",
+                "discovery_bucket": "configured",
+                "discovery_source": "configured",
+                "fusion_bull_pct": "0.90",
+                "mtf_1m": "neutral",
+                "mtf_5m": "bullish",
+                "mtf_15m": "bullish",
+                "regime": "trend_up",
+                "rsi": "58",
+                "momentum": "0.010",
+                "price_change_pct_24h": "0.04",
+                "volume_ratio": "1.20",
+            },
+        )
+
+        decision = apply_risk_controls(
+            snapshot,
+            signal,
+            StrategyConfig(confidence_scale_sizing=False, buy_quote_fraction=Decimal("0.40")),
+            RiskConfig(
+                mode="paper",
+                max_trade_quote=Decimal("100"),
+                max_position_quote=Decimal("500"),
+                min_trade_quote=Decimal("10"),
+                reserve_futures_available_usdt=Decimal("0"),
+                max_daily_trades=0,
+                require_reason_count=1,
+            ),
+            PaperPortfolio(cash={"USDT_FUTURES": Decimal("200")}, wallet_balance=Decimal("200")),
+            TradingMemory(),
+            auto_exec=ma.AutoExecutionConfig(default_leverage=5, max_leverage=5),
+            market_context={
+                "enabled": True,
+                "session": {"primary": "europe", "label": "欧盘"},
+                "funding": {"phase": "mid"},
+            },
+            market_context_cfg=market_context_from_config(
+                {
+                    "block_new_opens_sessions": ["europe"],
+                    "session_guard_dynamic_enabled": True,
+                    "session_guard_min_sample": 6,
+                }
+            ),
+            trade_learning={
+                "enabled": True,
+                "sessionStats": {
+                    "europe": {
+                        "sampleSize": 2,
+                        "winRate": "0.00",
+                        "profitFactor": "0.00",
+                        "totalPnl": "-0.2000",
+                    }
+                },
+            },
+            trade_lessons_cfg=__import__("trade_lessons").trade_lessons_from_config({"enabled": False}),
+            bucket_strategy_cfg=__import__("bucket_strategy").bucket_strategy_from_config({"enabled": False}),
+        )
+
+        self.assertTrue(decision.approved, decision.blocked_reasons)
+        self.assertFalse(any("Session guard" in reason for reason in decision.blocked_reasons))
+
     def test_recovery_probe_bypasses_only_session_guard_for_high_quality_setup(self) -> None:
         from market_context import market_context_from_config
         from recovery_mode import recovery_mode_from_config
@@ -759,7 +837,9 @@ class MarketAutotraderTests(unittest.TestCase):
                 "session": {"primary": "europe", "label": "欧盘"},
                 "funding": {"phase": "mid"},
             },
-            market_context_cfg=market_context_from_config({"block_new_opens_sessions": ["europe"]}),
+            market_context_cfg=market_context_from_config(
+                {"block_new_opens_sessions": ["europe"], "session_guard_dynamic_enabled": False}
+            ),
             trade_learning={
                 "enabled": True,
                 "sampleSize": 20,
@@ -832,7 +912,9 @@ class MarketAutotraderTests(unittest.TestCase):
                 "session": {"primary": "europe", "label": "欧盘"},
                 "funding": {"phase": "mid"},
             },
-            market_context_cfg=market_context_from_config({"block_new_opens_sessions": ["europe"]}),
+            market_context_cfg=market_context_from_config(
+                {"block_new_opens_sessions": ["europe"], "session_guard_dynamic_enabled": False}
+            ),
             trade_learning={
                 "enabled": True,
                 "sampleSize": 20,
@@ -904,7 +986,9 @@ class MarketAutotraderTests(unittest.TestCase):
                 "session": {"primary": "europe", "label": "欧盘"},
                 "funding": {"phase": "mid"},
             },
-            market_context_cfg=market_context_from_config({"block_new_opens_sessions": ["europe"]}),
+            market_context_cfg=market_context_from_config(
+                {"block_new_opens_sessions": ["europe"], "session_guard_dynamic_enabled": False}
+            ),
             trade_learning={
                 "enabled": True,
                 "sampleSize": 20,

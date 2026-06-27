@@ -40,6 +40,11 @@ class MarketContextConfig:
     funding_guard_minutes: int = 30
     block_new_opens_pre_funding: bool = False
     block_new_opens_sessions: tuple[str, ...] = ()
+    session_guard_dynamic_enabled: bool = True
+    session_guard_min_sample: int = 6
+    session_guard_max_win_rate: Decimal = Decimal("0.30")
+    session_guard_max_profit_factor: Decimal = Decimal("0.85")
+    session_guard_max_total_pnl: Decimal = Decimal("0")
     macro_btc_symbol: str = "BTCUSDT"
     macro_futures_base_url: str = "https://fapi.binance.com"
     cache_seconds: int = 300
@@ -60,6 +65,11 @@ def market_context_from_config(raw: dict[str, Any] | None) -> MarketContextConfi
         funding_guard_minutes=int(raw.get("funding_guard_minutes", 30)),
         block_new_opens_pre_funding=bool(raw.get("block_new_opens_pre_funding", False)),
         block_new_opens_sessions=tuple(str(v) for v in raw.get("block_new_opens_sessions", []) if str(v)),
+        session_guard_dynamic_enabled=bool(raw.get("session_guard_dynamic_enabled", True)),
+        session_guard_min_sample=int(raw.get("session_guard_min_sample", 6)),
+        session_guard_max_win_rate=decimal_from(raw.get("session_guard_max_win_rate", "0.30")),
+        session_guard_max_profit_factor=decimal_from(raw.get("session_guard_max_profit_factor", "0.85")),
+        session_guard_max_total_pnl=decimal_from(raw.get("session_guard_max_total_pnl", "0")),
         macro_btc_symbol=normalize_symbol(str(raw.get("macro_btc_symbol", "BTCUSDT"))),
         macro_futures_base_url=str(raw.get("macro_futures_base_url", "https://fapi.binance.com")),
         cache_seconds=int(raw.get("cache_seconds", 300)),
@@ -251,6 +261,12 @@ def market_context_block_reason(
     is_reduce_only: bool,
     block_pre_funding: bool,
     block_sessions: tuple[str, ...] = (),
+    trade_learning: dict[str, Any] | None = None,
+    session_guard_dynamic_enabled: bool = False,
+    session_guard_min_sample: int = 6,
+    session_guard_max_win_rate: Decimal = Decimal("0.30"),
+    session_guard_max_profit_factor: Decimal = Decimal("0.85"),
+    session_guard_max_total_pnl: Decimal = Decimal("0"),
 ) -> str | None:
     if not ctx.get("enabled") or is_reduce_only:
         return None
@@ -258,7 +274,26 @@ def market_context_block_reason(
     primary = str(session.get("primary") or "")
     if primary and primary in set(block_sessions):
         label = session.get("label") or primary
-        return f"Session guard: {label} has negative recent live expectancy; new opens blocked."
+        if session_guard_dynamic_enabled and trade_learning:
+            stat = (trade_learning.get("sessionStats") or {}).get(primary) or {}
+            sample = int(stat.get("sampleSize", 0) or 0)
+            if sample >= session_guard_min_sample:
+                win_rate = decimal_from(stat.get("winRate", "0"))
+                profit_factor = decimal_from(stat.get("profitFactor", "0"))
+                total_pnl = decimal_from(stat.get("totalPnl", "0"))
+                if (
+                    win_rate <= session_guard_max_win_rate
+                    and profit_factor <= session_guard_max_profit_factor
+                    and total_pnl <= session_guard_max_total_pnl
+                ):
+                    return (
+                        f"Session guard: {label} live edge weak "
+                        f"(n={sample}, WR={win_rate:.0%}, PF={profit_factor}, PnL={total_pnl}); "
+                        "new opens blocked."
+                    )
+                return None
+            return None
+        return f"Session guard: {label} is configured as a blocked open session; new opens blocked."
     funding = ctx.get("funding") or {}
     if block_pre_funding and funding.get("phase") == "pre":
         mins = funding.get("minutesToFunding", "?")

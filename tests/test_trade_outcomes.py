@@ -11,6 +11,7 @@ from trade_outcomes import (
     apply_bucket_sizing_factor,
     apply_shadow_canary_factor,
     apply_sizing_factor,
+    compute_session_stats,
     compute_trade_learning_snapshot,
     evaluate_learning_quality_probe,
     outcome_pnl,
@@ -60,6 +61,26 @@ def test_required_confidence_bump():
     snapshot = {"enabled": True, "confidenceBump": "0.05"}
     base = Decimal("0.65")
     assert required_confidence_with_learning(base, snapshot) == Decimal("0.70")
+
+
+def test_compute_session_stats_normalizes_labels_and_primary_keys():
+    rows = [
+        {"session": "欧盘", "netPnl": "-1"},
+        {"session": "欧盘", "netPnl": "0.5"},
+        {
+            "session": "重叠时段(欧盘/美盘)",
+            "netPnl": "0.25",
+            "openContext": {
+                "sessionPrimary": "overlap_europe_us",
+                "sessionLabel": "重叠时段(欧盘/美盘)",
+            },
+        },
+    ]
+    stats = compute_session_stats(rows)
+    assert stats["europe"]["sampleSize"] == 2
+    assert stats["europe"]["totalPnl"] == "-0.5000"
+    assert stats["overlap_europe_us"]["sampleSize"] == 1
+    assert stats["overlap_europe_us"]["label"] == "重叠时段(欧盘/美盘)"
 
 
 def test_loss_streak_defaults_to_quality_gate_not_hard_block(tmp_path: Path):

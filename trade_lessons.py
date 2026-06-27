@@ -726,8 +726,10 @@ def open_context_from_signal(
     confidence: Decimal | str | None,
     discovery_meta: dict[str, Any] | None,
     entry_price: Decimal | str | None = None,
+    market_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     meta = discovery_meta or {}
+    session = (market_context or {}).get("session") or {}
     ctx: dict[str, Any] = {
         "regime": signal_indicators.get("regime"),
         "bucket": meta.get("bucket") or meta.get("source"),
@@ -749,6 +751,10 @@ def open_context_from_signal(
         "entryQuadrantMode": str(signal_indicators.get("entry_quadrant_mode", "")),
         "capturedAt": int(time.time()),
     }
+    if session.get("primary"):
+        ctx["sessionPrimary"] = str(session.get("primary"))
+    if session.get("label"):
+        ctx["sessionLabel"] = str(session.get("label"))
     # RC2: persist the ACTUAL fill price at open so trade-outcome PnL/analytics use
     # the real entry, not the portfolio's running average_price (which collapses to
     # a stale/rounded value after partial reduces). Only stored when a real fill
