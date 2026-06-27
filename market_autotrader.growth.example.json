@@ -308,7 +308,22 @@
     "shadow_canary_min_profit_factor": "1.05",
     "shadow_canary_min_total_pnl": "1.0",
     "shadow_canary_max_live_sample": 3,
-    "shadow_canary_factor": "0.25"
+    "shadow_canary_factor": "0.25",
+    "hard_symbol_blocks_enabled": false,
+    "quality_gate_enabled": true,
+    "quality_probe_factor": "0.35",
+    "quality_probe_min_confidence": "0.92",
+    "quality_probe_min_fusion_pct": "0.75",
+    "quality_probe_min_volume_ratio": "0.85",
+    "quality_probe_max_abs_momentum": "0.025",
+    "quality_probe_max_abs_24h_change": "0.18",
+    "quality_probe_require_5m_alignment": true,
+    "quality_probe_require_15m_not_against": true,
+    "quality_probe_require_1m_not_against": true,
+    "quality_probe_long_min_rsi": "42",
+    "quality_probe_long_max_rsi": "70",
+    "quality_probe_short_min_rsi": "30",
+    "quality_probe_short_max_rsi": "58"
   },
   "trade_lessons": {
     "enabled": true,

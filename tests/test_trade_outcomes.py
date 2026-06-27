@@ -12,6 +12,7 @@ from trade_outcomes import (
     apply_shadow_canary_factor,
     apply_sizing_factor,
     compute_trade_learning_snapshot,
+    evaluate_learning_quality_probe,
     outcome_pnl,
     record_trade_outcome,
     required_confidence_with_learning,
@@ -61,7 +62,7 @@ def test_required_confidence_bump():
     assert required_confidence_with_learning(base, snapshot) == Decimal("0.70")
 
 
-def test_loss_streak_blocks_new_opens(tmp_path: Path):
+def test_loss_streak_defaults_to_quality_gate_not_hard_block(tmp_path: Path):
     outcomes = tmp_path / "outcomes.jsonl"
     cfg = trade_learning_from_config(
         {
@@ -69,6 +70,56 @@ def test_loss_streak_blocks_new_opens(tmp_path: Path):
             "outcomes_path": str(outcomes),
             "state_path": str(tmp_path / "state.json"),
             "loss_streak_cooldown": 2,
+        }
+    )
+    for _ in range(2):
+        record_trade_outcome(
+            cfg,
+            symbol="TESTUSDT",
+            side="SELL",
+            quantity=Decimal("1"),
+            exit_price=Decimal("9"),
+            entry_price=Decimal("10"),
+            position_side="LONG",
+            regime="range",
+            session="亚盘",
+            rationale_summary="test",
+        )
+    snapshot = compute_trade_learning_snapshot(cfg)
+    reason = trade_learning_block_reason(snapshot, symbol="TESTUSDT", is_reduce_only=False, cfg=cfg)
+    assert reason is None
+    probe = evaluate_learning_quality_probe(
+        snapshot,
+        symbol="TESTUSDT",
+        cfg=cfg,
+        action="BUY",
+        confidence=Decimal("0.95"),
+        indicators={
+            "fusion_bull_pct": "0.90",
+            "mtf_1m": "neutral",
+            "mtf_5m": "bullish",
+            "mtf_15m": "bullish",
+            "momentum": "0.010",
+            "price_change_pct_24h": "0.04",
+            "volume_ratio": "1.20",
+            "rsi": "58",
+        },
+    )
+    assert probe.active is True
+    assert probe.approved is True
+    assert probe.size_factor == Decimal("0.35")
+    assert any("loss streak" in pressure for pressure in probe.pressures)
+
+
+def test_loss_streak_hard_block_can_be_enabled(tmp_path: Path):
+    outcomes = tmp_path / "outcomes.jsonl"
+    cfg = trade_learning_from_config(
+        {
+            "enabled": True,
+            "outcomes_path": str(outcomes),
+            "state_path": str(tmp_path / "state.json"),
+            "loss_streak_cooldown": 2,
+            "hard_symbol_blocks_enabled": True,
         }
     )
     for _ in range(2):
@@ -243,6 +294,38 @@ def test_low_win_rate_uses_shadow_first_not_hard_block(tmp_path: Path):
     assert shadow is True
     assert shadow_reason is not None
     assert "shadow paper" in shadow_reason
+    probe = evaluate_learning_quality_probe(
+        snapshot,
+        symbol="NEWUSDT",
+        cfg=cfg,
+        action="BUY",
+        confidence=Decimal("0.96"),
+        indicators={
+            "fusion_bull_pct": "0.88",
+            "mtf_1m": "neutral",
+            "mtf_5m": "bullish",
+            "mtf_15m": "bullish",
+            "momentum": "0.009",
+            "price_change_pct_24h": "0.04",
+            "volume_ratio": "1.10",
+            "rsi": "57",
+        },
+        bucket="futuresGainers",
+        source="discovery:futuresGainers",
+        is_discovery_open=True,
+    )
+    assert probe.active is True
+    assert probe.approved is True
+    shadow, shadow_reason = trade_learning_discovery_shadow_first(
+        snapshot,
+        cfg=cfg,
+        bucket="futuresGainers",
+        is_discovery_open=True,
+        quality_probe_approved=probe.approved,
+    )
+    assert shadow is False
+    assert shadow_reason is not None
+    assert "reduced-size probe" in shadow_reason
 
 
 def test_low_win_rate_does_not_block_non_discovery(tmp_path: Path):
@@ -794,7 +877,7 @@ def test_bucket_live_mode_overrides_force_shadow_lane(tmp_path: Path):
 
 
 class TradeOutcomeUnittestCoverage(unittest.TestCase):
-    def test_low_symbol_win_rate_blocks_even_without_loss_streak(self) -> None:
+    def test_low_symbol_win_rate_defaults_to_quality_gate(self) -> None:
         snapshot = {
             "enabled": True,
             "symbolStats": {
@@ -811,8 +894,26 @@ class TradeOutcomeUnittestCoverage(unittest.TestCase):
         reason = trade_learning_block_reason(
             snapshot, symbol="TSLAUSDT", is_reduce_only=False, cfg=cfg
         )
-        self.assertIsNotNone(reason)
-        self.assertIn("recent win rate", reason)
+        self.assertIsNone(reason)
+        probe = evaluate_learning_quality_probe(
+            snapshot,
+            symbol="TSLAUSDT",
+            cfg=cfg,
+            action="BUY",
+            confidence=Decimal("0.80"),
+            indicators={
+                "fusion_bull_pct": "0.90",
+                "mtf_5m": "bullish",
+                "mtf_15m": "bullish",
+                "momentum": "0.010",
+                "price_change_pct_24h": "0.04",
+                "volume_ratio": "1.10",
+                "rsi": "57",
+            },
+        )
+        self.assertTrue(probe.active)
+        self.assertFalse(probe.approved)
+        self.assertIn("confidence", probe.reason)
 
     def test_low_symbol_win_rate_does_not_block_reduce_only(self) -> None:
         snapshot = {

@@ -86,6 +86,30 @@ class TradeLearningConfig:
     shadow_canary_success_profit_factor: Decimal = Decimal("1.20")
     shadow_canary_success_win_rate: Decimal = Decimal("0.45")
     shadow_canary_success_factor: Decimal = Decimal("0.50")
+    hard_symbol_blocks_enabled: bool = False
+    quality_gate_enabled: bool = True
+    quality_probe_factor: Decimal = Decimal("0.35")
+    quality_probe_min_confidence: Decimal = Decimal("0.92")
+    quality_probe_min_fusion_pct: Decimal = Decimal("0.75")
+    quality_probe_min_volume_ratio: Decimal = Decimal("0.85")
+    quality_probe_max_abs_momentum: Decimal = Decimal("0.025")
+    quality_probe_max_abs_24h_change: Decimal = Decimal("0.18")
+    quality_probe_require_5m_alignment: bool = True
+    quality_probe_require_15m_not_against: bool = True
+    quality_probe_require_1m_not_against: bool = True
+    quality_probe_long_min_rsi: Decimal = Decimal("42")
+    quality_probe_long_max_rsi: Decimal = Decimal("70")
+    quality_probe_short_min_rsi: Decimal = Decimal("30")
+    quality_probe_short_max_rsi: Decimal = Decimal("58")
+
+
+@dataclass(frozen=True)
+class LearningQualityProbe:
+    active: bool
+    approved: bool
+    reason: str
+    size_factor: Decimal = Decimal("1")
+    pressures: tuple[str, ...] = ()
 
 
 def trade_learning_from_config(raw: dict[str, Any] | None) -> TradeLearningConfig:
@@ -157,6 +181,21 @@ def trade_learning_from_config(raw: dict[str, Any] | None) -> TradeLearningConfi
         shadow_canary_success_profit_factor=decimal_from(raw.get("shadow_canary_success_profit_factor", "1.20")),
         shadow_canary_success_win_rate=decimal_from(raw.get("shadow_canary_success_win_rate", "0.45")),
         shadow_canary_success_factor=decimal_from(raw.get("shadow_canary_success_factor", "0.50")),
+        hard_symbol_blocks_enabled=bool(raw.get("hard_symbol_blocks_enabled", False)),
+        quality_gate_enabled=bool(raw.get("quality_gate_enabled", True)),
+        quality_probe_factor=decimal_from(raw.get("quality_probe_factor", "0.35")),
+        quality_probe_min_confidence=decimal_from(raw.get("quality_probe_min_confidence", "0.92")),
+        quality_probe_min_fusion_pct=decimal_from(raw.get("quality_probe_min_fusion_pct", "0.75")),
+        quality_probe_min_volume_ratio=decimal_from(raw.get("quality_probe_min_volume_ratio", "0.85")),
+        quality_probe_max_abs_momentum=decimal_from(raw.get("quality_probe_max_abs_momentum", "0.025")),
+        quality_probe_max_abs_24h_change=decimal_from(raw.get("quality_probe_max_abs_24h_change", "0.18")),
+        quality_probe_require_5m_alignment=bool(raw.get("quality_probe_require_5m_alignment", True)),
+        quality_probe_require_15m_not_against=bool(raw.get("quality_probe_require_15m_not_against", True)),
+        quality_probe_require_1m_not_against=bool(raw.get("quality_probe_require_1m_not_against", True)),
+        quality_probe_long_min_rsi=decimal_from(raw.get("quality_probe_long_min_rsi", "42")),
+        quality_probe_long_max_rsi=decimal_from(raw.get("quality_probe_long_max_rsi", "70")),
+        quality_probe_short_min_rsi=decimal_from(raw.get("quality_probe_short_min_rsi", "30")),
+        quality_probe_short_max_rsi=decimal_from(raw.get("quality_probe_short_max_rsi", "58")),
     )
 
 
@@ -850,6 +889,7 @@ def trade_learning_discovery_shadow_first(
     cfg: TradeLearningConfig,
     bucket: str,
     is_discovery_open: bool,
+    quality_probe_approved: bool = False,
 ) -> tuple[bool, str | None]:
     if not snapshot.get("enabled") or not is_discovery_open or not cfg.win_rate_shadow_first:
         return False, None
@@ -859,6 +899,8 @@ def trade_learning_discovery_shadow_first(
     bucket_modes = snapshot.get("bucketLiveModes") or {}
 
     if global_mode == "shadow_first":
+        if quality_probe_approved:
+            return False, "Trade learning: weak global discovery allowed as high-quality reduced-size probe."
         return (
             True,
             (
@@ -879,6 +921,8 @@ def trade_learning_discovery_shadow_first(
         canary_factor = decimal_from((snapshot.get("bucketCanaryFactors") or {}).get(bucket_key, "0"))
         if canary_note and Decimal("0") < canary_factor < Decimal("1"):
             return False, str(canary_note)
+        if quality_probe_approved:
+            return False, f"Trade learning: weak bucket {bucket_key} allowed as high-quality reduced-size probe."
         return (
             True,
             (
@@ -891,6 +935,165 @@ def trade_learning_discovery_shadow_first(
     return False, None
 
 
+def _bucket_key(bucket: str, source: str = "") -> str:
+    value = str(bucket or "").strip()
+    if value:
+        return value
+    source = str(source or "")
+    if source.startswith("discovery:"):
+        return source.split(":", 1)[1]
+    if source.startswith("pinned"):
+        return "pinned"
+    if source:
+        return source
+    return "configured"
+
+
+def _learning_pressures(
+    snapshot: dict[str, Any],
+    *,
+    symbol: str,
+    cfg: TradeLearningConfig,
+    bucket: str = "",
+    source: str = "",
+    is_discovery_open: bool = False,
+) -> tuple[str, ...]:
+    pressures: list[str] = []
+    sample = int(snapshot.get("sampleSize", 0))
+    win_rate = decimal_from(snapshot.get("winRate", "0"))
+    profit_factor = decimal_from(snapshot.get("profitFactor", "0"))
+    total_pnl = decimal_from(snapshot.get("totalRealizedPnl", "0"))
+    if sample >= cfg.min_sample_for_win_rate_block and (
+        win_rate < cfg.min_win_rate_block or profit_factor < Decimal("1") or total_pnl < 0
+    ):
+        pressures.append(
+            f"global edge weak: WR={win_rate:.0%}, PF={profit_factor}, pnl={total_pnl}"
+        )
+
+    sym = normalize_symbol(symbol)
+    stats = (snapshot.get("symbolStats") or {}).get(sym) or {}
+    streak = int(stats.get("lossStreak", 0))
+    if streak >= cfg.loss_streak_cooldown:
+        pressures.append(f"{sym} loss streak {streak}")
+    recent_trades = int(stats.get("recentTrades", 0))
+    symbol_wr = decimal_from(stats.get("winRate", "0"))
+    if recent_trades >= cfg.min_symbol_sample_for_block and symbol_wr < cfg.min_symbol_win_rate_block:
+        pressures.append(f"{sym} symbol WR={symbol_wr:.0%} over {recent_trades}")
+
+    bucket_name = _bucket_key(bucket, source)
+    bucket_stat = (snapshot.get("bucketStats") or {}).get(bucket_name) or {}
+    if bucket_stat:
+        bucket_sample = int(bucket_stat.get("sampleSize", 0))
+        bucket_wr = decimal_from(bucket_stat.get("winRate", "0"))
+        bucket_pf = decimal_from(bucket_stat.get("profitFactor", "0"))
+        bucket_pnl = decimal_from(bucket_stat.get("totalPnl", "0"))
+        if bucket_sample >= cfg.min_bucket_sample and (
+            bucket_wr < cfg.min_win_rate_block or bucket_pf < Decimal("1") or bucket_pnl < 0
+        ):
+            pressures.append(
+                f"bucket {bucket_name} weak: WR={bucket_wr:.0%}, PF={bucket_pf}, pnl={bucket_pnl}"
+            )
+
+    if is_discovery_open:
+        bucket_modes = snapshot.get("bucketLiveModes") or {}
+        canary_factor = decimal_from((snapshot.get("bucketCanaryFactors") or {}).get(bucket_name, "0"))
+        has_canary = Decimal("0") < canary_factor < Decimal("1")
+        if bucket_name and bucket_modes.get(bucket_name) == "shadow_first":
+            if not has_canary:
+                pressures.append(f"bucket {bucket_name} in shadow_first")
+        elif str(snapshot.get("discoveryLiveMode") or "") == "shadow_first":
+            pressures.append("global discovery in shadow_first")
+    return tuple(pressures)
+
+
+def evaluate_learning_quality_probe(
+    snapshot: dict[str, Any],
+    *,
+    symbol: str,
+    cfg: TradeLearningConfig,
+    action: str,
+    confidence: Decimal,
+    indicators: dict[str, Any],
+    bucket: str = "",
+    source: str = "",
+    is_reduce_only: bool = False,
+    is_discovery_open: bool = False,
+) -> LearningQualityProbe:
+    if not snapshot.get("enabled") or is_reduce_only or not cfg.quality_gate_enabled:
+        return LearningQualityProbe(False, True, "learning quality gate inactive")
+
+    pressures = _learning_pressures(
+        snapshot,
+        symbol=symbol,
+        cfg=cfg,
+        bucket=bucket,
+        source=source,
+        is_discovery_open=is_discovery_open,
+    )
+    if not pressures:
+        return LearningQualityProbe(False, True, "no adverse learning pressure")
+
+    if confidence < cfg.quality_probe_min_confidence:
+        return LearningQualityProbe(
+            True,
+            False,
+            f"confidence {confidence} < learning quality minimum {cfg.quality_probe_min_confidence}",
+            pressures=pressures,
+        )
+
+    mtf_1m = str(indicators.get("mtf_1m") or "").lower()
+    mtf_5m = str(indicators.get("mtf_5m") or "").lower()
+    mtf_15m = str(indicators.get("mtf_15m") or "").lower()
+    momentum = decimal_from(indicators.get("momentum", "0") or "0")
+    change_24h = decimal_from(indicators.get("price_change_pct_24h", "0") or "0")
+    volume_ratio = decimal_from(indicators.get("volume_ratio", "0") or "0")
+    rsi = decimal_from(indicators.get("rsi", "0") or "0")
+
+    if abs(momentum) > cfg.quality_probe_max_abs_momentum:
+        return LearningQualityProbe(True, False, f"momentum {momentum:.2%} exceeds learning quality limit", pressures=pressures)
+    if abs(change_24h) > cfg.quality_probe_max_abs_24h_change:
+        return LearningQualityProbe(True, False, f"24h change {change_24h:.2%} exceeds learning quality limit", pressures=pressures)
+    if volume_ratio < cfg.quality_probe_min_volume_ratio:
+        return LearningQualityProbe(True, False, f"volume ratio {volume_ratio} < {cfg.quality_probe_min_volume_ratio}", pressures=pressures)
+
+    if action == "BUY":
+        fusion = decimal_from(indicators.get("fusion_bull_pct", "0") or "0")
+        if fusion < cfg.quality_probe_min_fusion_pct:
+            return LearningQualityProbe(True, False, f"bull fusion {fusion} < {cfg.quality_probe_min_fusion_pct}", pressures=pressures)
+        if cfg.quality_probe_require_5m_alignment and mtf_5m != "bullish":
+            return LearningQualityProbe(True, False, f"long learning probe requires 5m bullish (got {mtf_5m or 'neutral'})", pressures=pressures)
+        if cfg.quality_probe_require_15m_not_against and mtf_15m == "bearish":
+            return LearningQualityProbe(True, False, "long learning probe blocked by bearish 15m", pressures=pressures)
+        if cfg.quality_probe_require_1m_not_against and mtf_1m == "bearish":
+            return LearningQualityProbe(True, False, "long learning probe blocked by bearish 1m", pressures=pressures)
+        if not (cfg.quality_probe_long_min_rsi <= rsi <= cfg.quality_probe_long_max_rsi):
+            return LearningQualityProbe(True, False, f"long RSI {rsi} outside learning range", pressures=pressures)
+    elif action == "SELL":
+        fusion = decimal_from(indicators.get("fusion_bear_pct", "0") or "0")
+        if fusion < cfg.quality_probe_min_fusion_pct:
+            return LearningQualityProbe(True, False, f"bear fusion {fusion} < {cfg.quality_probe_min_fusion_pct}", pressures=pressures)
+        if cfg.quality_probe_require_5m_alignment and mtf_5m != "bearish":
+            return LearningQualityProbe(True, False, f"short learning probe requires 5m bearish (got {mtf_5m or 'neutral'})", pressures=pressures)
+        if cfg.quality_probe_require_15m_not_against and mtf_15m == "bullish":
+            return LearningQualityProbe(True, False, "short learning probe blocked by bullish 15m", pressures=pressures)
+        if cfg.quality_probe_require_1m_not_against and mtf_1m == "bullish":
+            return LearningQualityProbe(True, False, "short learning probe blocked by bullish 1m", pressures=pressures)
+        if not (cfg.quality_probe_short_min_rsi <= rsi <= cfg.quality_probe_short_max_rsi):
+            return LearningQualityProbe(True, False, f"short RSI {rsi} outside learning range", pressures=pressures)
+    else:
+        return LearningQualityProbe(True, False, f"unsupported learning quality action {action}", pressures=pressures)
+
+    factor = min(max(cfg.quality_probe_factor, Decimal("0.05")), Decimal("1"))
+    factor = factor.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    return LearningQualityProbe(
+        True,
+        True,
+        "learning pressure accepted only as high-quality reduced-size probe",
+        factor,
+        pressures,
+    )
+
+
 def trade_learning_block_reason(
     snapshot: dict[str, Any],
     *,
@@ -900,7 +1103,7 @@ def trade_learning_block_reason(
     is_discovery_open: bool = False,
 ) -> str | None:
     del is_discovery_open  # win-rate gate is shadow-first, not hard block
-    if not snapshot.get("enabled") or is_reduce_only:
+    if not snapshot.get("enabled") or is_reduce_only or not cfg.hard_symbol_blocks_enabled:
         return None
     sym = normalize_symbol(symbol)
     stats = (snapshot.get("symbolStats") or {}).get(sym) or {}

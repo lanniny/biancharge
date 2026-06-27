@@ -627,6 +627,83 @@ class MarketAutotraderTests(unittest.TestCase):
         self.assertEqual(signal.indicators.get("trade_learning_shadow_canary"), "true")
         self.assertFalse(any("shadow paper" in reason for reason in decision.reasons))
 
+    def test_learning_quality_probe_allows_weak_bucket_reduced_size(self) -> None:
+        asset = AssetConfig(
+            symbol="BTCUSDT",
+            market="binance_futures",
+            base_asset="BTC",
+            quote_asset="USDT",
+            provider={},
+        )
+        snapshot = MarketSnapshot(asset=asset, bars=reasonable_buy_bars(), observed_at=1000)
+        signal = ma.Signal(
+            action=BUY,
+            confidence=Decimal("0.96"),
+            reasons=["strong"],
+            warnings=[],
+            indicators={
+                "atr_pct": "0.01",
+                "discovery_bucket": "futuresTopVolume",
+                "discovery_source": "discovery:futuresTopVolume",
+                "fusion_bull_pct": "0.90",
+                "mtf_1m": "neutral",
+                "mtf_5m": "bullish",
+                "mtf_15m": "bullish",
+                "momentum": "0.010",
+                "price_change_pct_24h": "0.04",
+                "volume_ratio": "1.20",
+                "rsi": "58",
+            },
+        )
+
+        decision = apply_risk_controls(
+            snapshot,
+            signal,
+            StrategyConfig(confidence_scale_sizing=False, buy_quote_fraction=Decimal("0.40")),
+            RiskConfig(
+                mode="paper",
+                max_trade_quote=Decimal("100"),
+                max_position_quote=Decimal("500"),
+                min_trade_quote=Decimal("10"),
+                reserve_futures_available_usdt=Decimal("0"),
+                max_daily_trades=0,
+                require_reason_count=1,
+            ),
+            PaperPortfolio(cash={"USDT_FUTURES": Decimal("200")}, wallet_balance=Decimal("200")),
+            TradingMemory(),
+            auto_exec=ma.AutoExecutionConfig(default_leverage=5, max_leverage=5),
+            trade_learning={
+                "enabled": True,
+                "sampleSize": 20,
+                "winRate": "0.15",
+                "profitFactor": "0.12",
+                "totalRealizedPnl": "-4.6968",
+                "bucketLiveModes": {"futuresTopVolume": "shadow_first"},
+                "shadowFirstBuckets": ["futuresTopVolume"],
+                "bucketStats": {
+                    "futuresTopVolume": {
+                        "sampleSize": 7,
+                        "winRate": "0.00",
+                        "profitFactor": "0.00",
+                        "totalPnl": "-0.1706",
+                    }
+                },
+            },
+            trade_learning_cfg=__import__("trade_outcomes").trade_learning_from_config(
+                {"enabled": True, "quality_probe_factor": "0.35"}
+            ),
+            trade_lessons_cfg=__import__("trade_lessons").trade_lessons_from_config({"enabled": False}),
+            bucket_strategy_cfg=__import__("bucket_strategy").bucket_strategy_from_config({"enabled": False}),
+        )
+
+        self.assertTrue(decision.approved, decision.blocked_reasons)
+        self.assertIsNotNone(decision.order)
+        self.assertEqual(decision.order.quote_amount, Decimal("35.00000000"))
+        probe = signal.indicators.get("trade_learning_quality_probe")
+        self.assertIsInstance(probe, dict)
+        self.assertTrue(probe.get("approved"))
+        self.assertTrue(any("quality probe" in reason for reason in decision.reasons))
+
     def test_recovery_probe_bypasses_only_session_guard_for_high_quality_setup(self) -> None:
         from market_context import market_context_from_config
         from recovery_mode import recovery_mode_from_config

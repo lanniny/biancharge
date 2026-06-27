@@ -2497,6 +2497,7 @@ def apply_risk_controls(
         apply_bucket_sizing_factor,
         apply_shadow_canary_factor,
         apply_sizing_factor,
+        evaluate_learning_quality_probe,
         required_confidence_with_learning,
         trade_learning_block_reason,
         trade_learning_discovery_shadow_first,
@@ -2783,11 +2784,44 @@ def apply_risk_controls(
         )
         if learn_reason:
             blocked.append(learn_reason)
+        quality_probe = evaluate_learning_quality_probe(
+            trade_learning,
+            symbol=symbol,
+            cfg=trade_learning_cfg,
+            action=order.action,
+            confidence=decimal_from(signal.confidence),
+            indicators=indicators,
+            bucket=str(indicators.get("discovery_bucket") or ""),
+            source=discovery_source,
+            is_reduce_only=order.reduce_only,
+            is_discovery_open=is_discovery_open,
+        )
+        if quality_probe.active:
+            indicators["trade_learning_quality_probe"] = {
+                "approved": quality_probe.approved,
+                "reason": quality_probe.reason,
+                "sizeFactor": str(quality_probe.size_factor),
+                "pressures": list(quality_probe.pressures),
+            }
+            if quality_probe.approved:
+                if Decimal("0") < quality_probe.size_factor < Decimal("1") and order.quote_amount > 0:
+                    scaled = (order.quote_amount * quality_probe.size_factor).quantize(
+                        Decimal("0.00000001"), rounding=ROUND_DOWN
+                    )
+                    if scaled != order.quote_amount:
+                        order = replace(order, quote_amount=scaled)
+                reasons.append(
+                    f"Trade learning quality probe: {quality_probe.reason}; "
+                    f"size x{quality_probe.size_factor}; pressures={', '.join(quality_probe.pressures)}."
+                )
+            else:
+                blocked.append(f"Trade learning quality gate: {quality_probe.reason}.")
         shadow_first, shadow_reason = trade_learning_discovery_shadow_first(
             trade_learning,
             cfg=trade_learning_cfg,
             bucket=str(indicators.get("discovery_bucket") or ""),
             is_discovery_open=is_discovery_open,
+            quality_probe_approved=bool(quality_probe.active and quality_probe.approved),
         )
         if shadow_first and shadow_reason:
             indicators["trade_learning_shadow_first"] = "true"
@@ -5233,6 +5267,10 @@ def execute_decision(
                 cfg=trade_learning_cfg,
                 bucket=str(signal.indicators.get("discovery_bucket") or ""),
                 is_discovery_open=is_discovery_open,
+                quality_probe_approved=bool(
+                    isinstance(signal.indicators.get("trade_learning_quality_probe"), dict)
+                    and signal.indicators.get("trade_learning_quality_probe", {}).get("approved") is True
+                ),
             )
         trade_learning_shadow = trade_learning_shadow or quadrant_shadow
         if quadrant_shadow_reason and not trade_learning_shadow_reason:
