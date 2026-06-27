@@ -1,0 +1,25 @@
+__pycache__/
+.pytest_cache/
+.venv/
+.agents/
+.codex/
+.claude/
+.ai-shared/
+.serena/
+logs/
+approvals/
+*.pyc
+.env
+.env.*
+.env.bak.*
+!.env.example
+*.bak.*
+*.log
+*.tmp
+*.swp
+
+# Local/live runtime configuration. Commit sanitized *.example.json files instead.
+market_autotrader.vps.json
+market_autotrader.close-spcx.json
+market_autotrader.open-now.json
+config/pinned-symbols.json

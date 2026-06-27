@@ -1,0 +1,19 @@
+[Unit]
+Description=Binance Market Autotrader (growth pipeline)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/home/deploy/market-autotrader
+Environment=PYTHONUNBUFFERED=1
+Environment=CONFIG=market_autotrader.vps.json
+Environment=LOOP_DELAY=90
+EnvironmentFile=-/home/deploy/market-autotrader/.env
+ExecStart=/home/deploy/market-autotrader/deploy/run_autotrader.sh
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

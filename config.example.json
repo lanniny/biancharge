@@ -1,0 +1,34 @@
+{
+  "poll_seconds": 10,
+  "price_endpoints": [
+    "https://api.binance.com/api/v3/ticker/price",
+    "https://api.binance.us/api/v3/ticker/price"
+  ],
+  "base_urls": [
+    "https://api.binance.com",
+    "https://api.binance.us"
+  ],
+  "symbols": ["BTCUSDT", "ETHUSDT"],
+  "alerts": [
+    {
+      "symbol": "BTCUSDT",
+      "above": 120000,
+      "below": 90000
+    }
+  ],
+  "paper_wallet": {
+    "USDT": 10000,
+    "BTC": 0,
+    "ETH": 0
+  },
+  "paper_strategy": [
+    {
+      "symbol": "BTCUSDT",
+      "base_asset": "BTC",
+      "quote_asset": "USDT",
+      "buy_below": 90000,
+      "sell_above": 120000,
+      "trade_quote_amount": 1000
+    }
+  ]
+}

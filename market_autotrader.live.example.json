@@ -1,0 +1,156 @@
+{
+  "poll_seconds": 60,
+  "ledger_path": "logs/market-autotrader-live-decisions.jsonl",
+  "portfolio": {
+    "cash": { "USDT": "0" },
+    "positions": {}
+  },
+  "risk": {
+    "mode": "live",
+    "allow_live_trading": true,
+    "allowed_live_markets": ["futures"],
+    "scale_sizing_with_equity": true,
+    "risk_per_trade_pct": "0.015",
+    "min_trade_quote": "50",
+    "max_trade_quote": "800",
+    "max_position_quote": "5000",
+    "max_portfolio_heat_pct": "0.85",
+    "target_equity_quote": "300000",
+    "min_confidence": "0.65",
+    "max_volatility": "0.15",
+    "max_drawdown": "0.18",
+    "max_daily_trades": 12,
+    "max_daily_loss_pct": "0.025",
+    "max_daily_loss_quote": "25",
+    "cooldown_seconds": 180,
+    "require_reason_count": 4,
+    "kill_switch_path": "logs/live-trading.kill",
+    "live_arm_path": "logs/live-trading.armed",
+    "reserve_futures_available_usdt": "5",
+    "allow_futures_open": true,
+    "benchmark_gate": {
+      "enabled": true,
+      "symbol": "BTCUSDT",
+      "lookback_days": 7,
+      "max_drawdown_pct": "0.10",
+      "block_new_opens_only": true,
+      "cache_seconds": 300
+    }
+  },
+  "execution": {
+    "mode": "live",
+    "binance_base_url": "https://api.binance.com",
+    "binance_futures_base_url": "https://fapi.binance.com",
+    "api_key": "env:BINANCE_API_KEY",
+    "api_secret": "env:BINANCE_API_SECRET",
+    "recv_window": 60000,
+    "order_type": "MARKET",
+    "timeout_seconds": 12,
+    "allowed_live_markets": ["futures"],
+    "state_path": "logs/live-trading-state.json"
+  },
+  "auto_execution": {
+    "entry_order_type": "MARKET",
+    "limit_offset_pct": "0.001",
+    "time_in_force": "GTC",
+    "auto_leverage": true,
+    "default_leverage": 5,
+    "max_leverage": 8,
+    "auto_take_profit_stop_loss": true,
+    "use_atr_stops": true,
+    "atr_stop_multiplier": "2.0",
+    "atr_tp_multiplier": "3.5",
+    "take_profit_pct": "0.03",
+    "stop_loss_pct": "0.018",
+    "working_type": "MARK_PRICE",
+    "full_close_threshold": "0.99"
+  },
+  "strategy": {
+    "fast_window": 8,
+    "slow_window": 21,
+    "momentum_window": 6,
+    "rsi_window": 14,
+    "atr_window": 14,
+    "adx_window": 14,
+    "bb_window": 20,
+    "bb_squeeze_width": "0.045",
+    "adx_range_max": "22",
+    "primary_signal_bars": 5,
+    "regime_adaptive_signal": true,
+    "short_in_downtrend_boost": true,
+    "confidence_scale_sizing": true,
+    "min_buy_confidence": "0.65",
+    "min_sell_confidence": "0.58",
+    "buy_quote_fraction": "0.35",
+    "sell_position_fraction": "0.5",
+    "holding_reduce_loss_pct": "0.02",
+    "holding_take_profit_pct": "0.05",
+    "holding_trailing_activate_pct": "0.03",
+    "min_fusion_bull_pct": "0.48",
+    "rsrs_enabled": true,
+    "rsrs_window": 18,
+    "rsrs_min_buy": "0.45"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "market": "binance_futures",
+      "base_asset": "BTC",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://fapi.binance.com",
+        "path": "/fapi/v1/klines",
+        "interval": "1m",
+        "limit": 180,
+        "timeout_seconds": 12
+      }
+    },
+    {
+      "symbol": "SPCXUSDT",
+      "market": "binance_futures",
+      "base_asset": "SPCX",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://fapi.binance.com",
+        "path": "/fapi/v1/klines",
+        "interval": "1m",
+        "limit": 180,
+        "timeout_seconds": 12
+      }
+    }
+  ],
+  "market_discovery": {
+    "enabled": true,
+    "min_quote_volume_usdt": "5000000",
+    "spot_top_by_volume": 15,
+    "futures_top_by_volume": 30,
+    "max_gainers": 12,
+    "max_losers": 12,
+    "max_analyze_per_cycle": 20,
+    "max_discovered_trades_per_cycle": 4,
+    "include_holdings": true,
+    "trade_discovered": true,
+    "regime_filter_enabled": true,
+    "prefer_futures_only": true,
+    "regime_cache_seconds": 300,
+    "pinned_store_path": "config/pinned-symbols.json",
+    "snapshot_path": "logs/market-discovery-latest.json",
+    "pinned": [
+      {"symbol": "SPCXUSDT", "market": "binance_futures"}
+    ]
+  },
+  "pipeline": {
+    "enabled": true,
+    "handoff_dir": "logs/pipeline",
+    "persist_handoffs": true,
+    "state_path": "logs/pipeline/pipeline-state.json"
+  },
+  "trading_costs": {
+    "enabled": true,
+    "lookback_hours": 24,
+    "snapshot_path": "logs/trading-costs-latest.json",
+    "state_path": "logs/trading-costs-state.json"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "poll_seconds": 60,
+  "ledger_path": "logs/market-autotrader-live-data-decisions.jsonl",
+  "portfolio": {
+    "cash": {
+      "USDT": "10000",
+      "USD": "10000"
+    },
+    "positions": {}
+  },
+  "risk": {
+    "mode": "paper",
+    "allow_live_trading": false,
+    "max_trade_quote": "250",
+    "max_position_quote": "1000",
+    "min_confidence": "0.60",
+    "max_volatility": "0.08",
+    "max_drawdown": "0.12",
+    "max_daily_trades": 8,
+    "cooldown_seconds": 300,
+    "require_reason_count": 3
+  },
+  "strategy": {
+    "fast_window": 8,
+    "slow_window": 21,
+    "momentum_window": 6,
+    "rsi_window": 14,
+    "min_buy_confidence": "0.68",
+    "min_sell_confidence": "0.62",
+    "buy_quote_fraction": "0.10",
+    "sell_position_fraction": "1.0"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "market": "binance_spot",
+      "base_asset": "BTC",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://api.binance.com",
+        "path": "/api/v3/klines",
+        "interval": "1m",
+        "limit": 120,
+        "timeout_seconds": 10
+      }
+    },
+    {
+      "symbol": "AAPL",
+      "market": "us_equity",
+      "base_asset": "AAPL",
+      "quote_asset": "USD",
+      "provider": {
+        "type": "alpaca",
+        "api_key": "env:APCA_API_KEY_ID",
+        "api_secret": "env:APCA_API_SECRET_KEY",
+        "data_base_url": "https://data.alpaca.markets",
+        "timeframe": "1Min",
+        "limit": 120,
+        "timeout_seconds": 10
+      }
+    }
+  ]
+}

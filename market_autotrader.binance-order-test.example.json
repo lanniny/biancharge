@@ -1,0 +1,57 @@
+{
+  "poll_seconds": 60,
+  "ledger_path": "logs/market-autotrader-binance-order-test-decisions.jsonl",
+  "portfolio": {
+    "cash": {
+      "USDT": "10000"
+    },
+    "positions": {}
+  },
+  "risk": {
+    "mode": "binance_order_test",
+    "allow_live_trading": false,
+    "max_trade_quote": "20",
+    "max_position_quote": "100",
+    "min_confidence": "0.60",
+    "max_volatility": "0.08",
+    "max_drawdown": "0.12",
+    "max_daily_trades": 2,
+    "cooldown_seconds": 300,
+    "require_reason_count": 3
+  },
+  "execution": {
+    "mode": "binance_order_test",
+    "binance_base_url": "https://api.binance.com",
+    "api_key": "env:BINANCE_API_KEY",
+    "api_secret": "env:BINANCE_API_SECRET",
+    "recv_window": 5000,
+    "order_type": "MARKET",
+    "timeout_seconds": 10
+  },
+  "strategy": {
+    "fast_window": 8,
+    "slow_window": 21,
+    "momentum_window": 6,
+    "rsi_window": 14,
+    "min_buy_confidence": "0.60",
+    "min_sell_confidence": "0.62",
+    "buy_quote_fraction": "0.002",
+    "sell_position_fraction": "1.0"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "market": "binance_spot",
+      "base_asset": "BTC",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://api.binance.com",
+        "path": "/api/v3/klines",
+        "interval": "1m",
+        "limit": 120,
+        "timeout_seconds": 10
+      }
+    }
+  ]
+}

@@ -1,0 +1,395 @@
+{
+  "poll_seconds": 60,
+  "ledger_path": "logs/market-autotrader-live-decisions.jsonl",
+  "portfolio": {
+    "cash": {
+      "USDT": "0"
+    },
+    "positions": {}
+  },
+  "risk": {
+    "mode": "live",
+    "allow_live_trading": true,
+    "allowed_live_markets": [
+      "futures"
+    ],
+    "scale_sizing_with_equity": true,
+    "risk_per_trade_pct": "0.015",
+    "min_trade_quote": "50",
+    "max_trade_quote": "800",
+    "max_position_quote": "5000",
+    "max_concurrent_positions": 8,
+    "min_margin_per_trade": "10",
+    "max_position_loss_pct": "0.08",
+    "max_portfolio_heat_pct": "0.85",
+    "target_equity_quote": "300000",
+    "min_confidence": "0.62",
+    "max_volatility": "0.15",
+    "max_drawdown": "0.18",
+    "max_daily_trades": 0,
+    "max_daily_loss_pct": "0.05",
+    "max_daily_loss_quote": "40",
+    "min_daily_loss_cap_quote": "8",
+    "daily_drag_scope": "loss_and_costs",
+    "daily_drag_blocks": "new_opens_only",
+    "cooldown_seconds": 600,
+    "require_reason_count": 3,
+    "kill_switch_path": "logs/live-trading.kill",
+    "live_arm_path": "logs/live-trading.armed",
+    "reserve_futures_available_usdt": "5",
+    "allow_futures_open": true,
+    "benchmark_gate": {
+      "enabled": true,
+      "symbol": "BTCUSDT",
+      "lookback_days": 7,
+      "max_drawdown_pct": "0.10",
+      "block_new_opens_only": true,
+      "cache_seconds": 300
+    }
+  },
+  "execution": {
+    "mode": "live",
+    "binance_base_url": "https://api.binance.com",
+    "binance_futures_base_url": "https://fapi.binance.com",
+    "api_key": "env:BINANCE_API_KEY",
+    "api_secret": "env:BINANCE_API_SECRET",
+    "recv_window": 60000,
+    "order_type": "MARKET",
+    "timeout_seconds": 12,
+    "allowed_live_markets": [
+      "futures"
+    ],
+    "state_path": "logs/live-trading-state.json",
+    "socks5_proxy": {
+      "enabled": true,
+      "url": "env:BINANCE_SOCKS5_PROXY"
+    },
+    "ssh_jump_tunnel": {
+      "enabled": true,
+      "ssh_host": "relay-15",
+      "local_host": "127.0.0.1",
+      "local_port": 19498,
+      "remote_host": "103.227.166.183",
+      "remote_port": 9498,
+      "identity_file": "C:/Users/16643/.ssh/vps_154",
+      "pid_path": "logs/socks-jump-tunnel.pid",
+      "status_path": "logs/socks-jump-tunnel.json"
+    }
+  },
+  "auto_execution": {
+    "entry_order_type": "MARKET",
+    "limit_offset_pct": "0.001",
+    "time_in_force": "GTC",
+    "auto_leverage": true,
+    "default_leverage": 5,
+    "max_leverage": 20,
+    "leverage_mid": 12,
+    "leverage_high": 20,
+    "leverage_extreme": 20,
+    "leverage_mid_confidence": "0.75",
+    "leverage_high_confidence": "0.85",
+    "leverage_extreme_confidence": "0.92",
+    "leverage_extreme_mtf_min": 3,
+    "max_leverage_crypto": 20,
+    "max_leverage_tradfi_stock": 20,
+    "max_leverage_tradfi_commodity": 25,
+    "max_leverage_tradfi_index": 15,
+    "leverage_atr_penalty_threshold": "0.06",
+    "leverage_atr_penalty_max_steps": 3,
+    "leverage_volatility_step_down": 5,
+    "auto_take_profit_stop_loss": true,
+    "use_atr_stops": true,
+    "atr_stop_multiplier": "2.5",
+    "atr_tp_multiplier": "3.5",
+    "take_profit_pct": "0.03",
+    "stop_loss_pct": "0.018",
+    "working_type": "MARK_PRICE",
+    "full_close_threshold": "0.99",
+    "account_max_leverage": 20
+  },
+  "strategy": {
+    "fast_window": 8,
+    "slow_window": 21,
+    "momentum_window": 6,
+    "rsi_window": 14,
+    "atr_window": 14,
+    "adx_window": 14,
+    "bb_window": 20,
+    "bb_squeeze_width": "0.045",
+    "adx_range_max": "22",
+    "primary_signal_bars": 5,
+    "regime_adaptive_signal": true,
+    "short_in_downtrend_boost": true,
+    "confidence_scale_sizing": true,
+    "min_buy_confidence": "0.62",
+    "min_sell_confidence": "0.65",
+    "buy_quote_fraction": "0.55",
+    "sell_position_fraction": "0.5",
+    "holding_reduce_loss_pct": "0.02",
+    "holding_take_profit_pct": "0.05",
+    "holding_trailing_activate_pct": "0.03",
+    "holding_peak_giveback_pct": "0.025",
+    "holding_early_take_pct": "0.03",
+    "holding_early_take_fraction": "0.30",
+    "holding_trend_up_giveback_mult": "1.2",
+    "holding_adverse_momentum_cut_mult": "0.75",
+    "allow_discovery_shorts": false,
+    "discovery_short_mode": "losers_soft",
+    "entry_min_edge_fee_multiple": "2.0",
+    "allow_pyramid_adds": false,
+    "max_adds_per_symbol_per_day": 1,
+    "pump_guard_min_change_24h_pct": "0.30",
+    "pump_guard_block_new_open_pct": "0.65",
+    "protection_breakeven_activate_pct": "0.03",
+    "protection_breakeven_buffer_pct": "0.001",
+    "trade_horizon": "swing",
+    "swing_take_profit_pct": "0.08",
+    "swing_stop_loss_pct": "0.035",
+    "swing_sell_position_fraction": "0.40",
+    "holding_max_hours": 48,
+    "holding_require_5m_exit_confirm": false,
+    "min_fusion_bull_pct": "0.48",
+    "rsrs_enabled": true,
+    "rsrs_window": 18,
+    "rsrs_min_buy": "0.45"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "market": "binance_futures",
+      "base_asset": "BTC",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://fapi.binance.com",
+        "path": "/fapi/v1/klines",
+        "interval": "1m",
+        "limit": 500,
+        "timeout_seconds": 12
+      }
+    },
+    {
+      "symbol": "SPCXUSDT",
+      "market": "binance_futures",
+      "base_asset": "SPCX",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://fapi.binance.com",
+        "path": "/fapi/v1/klines",
+        "interval": "1m",
+        "limit": 180,
+        "timeout_seconds": 12
+      }
+    }
+  ],
+  "market_discovery": {
+    "enabled": true,
+    "min_quote_volume_usdt": "5000000",
+    "spot_top_by_volume": 15,
+    "futures_top_by_volume": 30,
+    "max_gainers": 12,
+    "max_losers": 12,
+    "max_analyze_per_cycle": 28,
+    "max_discovered_trades_per_cycle": 6,
+    "include_holdings": true,
+    "trade_discovered": true,
+    "regime_filter_enabled": true,
+    "regime_filter_mode": "soft",
+    "prefer_futures_only": true,
+    "regime_cache_seconds": 300,
+    "kline_limit": 500,
+    "pinned_store_path": "config/pinned-symbols.json",
+    "snapshot_path": "logs/market-discovery-latest.json",
+    "pinned": [
+      {
+        "symbol": "SPCXUSDT",
+        "market": "binance_futures"
+      },
+      {
+        "symbol": "XAGUSDT",
+        "market": "binance_futures"
+      },
+      {
+        "symbol": "TSLAUSDT",
+        "market": "binance_futures"
+      }
+    ],
+    "include_tradfi": true,
+    "tradfi_min_quote_volume_usdt": "1000000",
+    "max_tradfi_symbols": 8,
+    "tradfi_always_include": [
+      "TSLAUSDT",
+      "AAPLUSDT",
+      "NVDAUSDT",
+      "XAUUSDT",
+      "XAGUSDT"
+    ]
+  },
+  "pipeline": {
+    "enabled": true,
+    "handoff_dir": "logs/pipeline",
+    "persist_handoffs": true,
+    "state_path": "logs/pipeline/pipeline-state.json"
+  },
+  "trading_costs": {
+    "enabled": true,
+    "lookback_hours": 24,
+    "snapshot_path": "logs/trading-costs-latest.json",
+    "state_path": "logs/trading-costs-state.json"
+  },
+  "market_context": {
+    "enabled": true,
+    "sentiment_enabled": true,
+    "session_tags_enabled": true,
+    "funding_guard_enabled": true,
+    "funding_guard_minutes": 30,
+    "block_new_opens_pre_funding": false,
+    "macro_btc_symbol": "BTCUSDT",
+    "cache_seconds": 300,
+    "snapshot_path": "logs/market-context-latest.json"
+  },
+  "trade_learning": {
+    "enabled": true,
+    "outcomes_path": "logs/trade-outcomes.jsonl",
+    "state_path": "logs/trade-learning-state.json",
+    "lookback_trades": 20,
+    "loss_streak_cooldown": 3,
+    "sizing_penalty_per_loss": "0.10",
+    "min_sizing_factor": "0.75",
+    "global_loss_rate_block": "0.65",
+    "min_confidence_bump": "0.02",
+    "bucket_live_mode_overrides": {
+      "futuresGainers": "live",
+      "futuresLosers": "shadow_first",
+      "futuresTradFi": "live"
+    },
+    "min_win_rate_block": "0.30",
+    "min_win_rate_unblock": "0.38",
+    "min_sample_for_win_rate_block": 15,
+    "bucket_win_rate_enabled": true,
+    "min_bucket_sample": 6,
+    "win_rate_shadow_first": true,
+    "shadow_graduation_enabled": true,
+    "min_shadow_bucket_sample": 6,
+    "min_shadow_global_sample": 10,
+    "shadow_outcomes_path": "logs/shadow-paper-outcomes.jsonl"
+  },
+  "trade_lessons": {
+    "enabled": true,
+    "lessons_path": "logs/trade-lessons.json",
+    "block_short_on_pump_pct": "0.50",
+    "block_short_in_squeeze": true,
+    "block_long_chase_gainer_pct": "0.25",
+    "chase_long_min_momentum": "0.015",
+    "chase_long_fusion_bypass": "0.55",
+    "block_short_oversold_rsi": "25",
+    "min_confidence_short_on_gainer": "0.85",
+    "block_short_positive_momentum": false,
+    "block_short_from_gainers_bucket": true
+  },
+  "supervisor_bridge": {
+    "enabled": true,
+    "events_path": "logs/realtime-supervisor-events.jsonl",
+    "max_age_seconds": 900
+  },
+  "bucket_strategy": {
+    "enabled": true,
+    "policies": {
+      "futuresGainers": {
+        "min_confidence_bump": "0.03",
+        "require_mtf_5m_align": true,
+        "min_fusion_bull_pct": "0.48"
+      },
+      "futuresLosers": {
+        "min_confidence_bump": "0.02",
+        "require_mtf_5m_align_short": true,
+        "short_allow_neutral_5m": true,
+        "min_fusion_bear_pct": "0.45"
+      },
+      "futuresTopVolume": {
+        "require_mtf_5m_align": true,
+        "require_mtf_5m_align_short": true,
+        "short_allow_neutral_5m": true
+      },
+      "futuresTradFi": {
+        "min_confidence_bump": "0.02",
+        "require_mtf_5m_align": true,
+        "require_mtf_5m_align_short": true,
+        "min_fusion_bull_pct": "0.50",
+        "min_fusion_bear_pct": "0.50",
+        "quote_fraction_mult": "0.80"
+      }
+    }
+  },
+  "shadow_paper": {
+    "enabled": true,
+    "ledger_path": "logs/shadow-paper-trades.jsonl",
+    "state_path": "logs/shadow-paper-state.json",
+    "outcomes_path": "logs/shadow-paper-outcomes.jsonl",
+    "shadow_discovery_opens_only": false,
+    "min_confidence": "0.62",
+    "shadow_blocked_counterfactual": true,
+    "blocked_counterfactual_min_confidence": "0.62",
+    "blocked_counterfactual_path": "logs/shadow-blocked-counterfactual.jsonl",
+    "blocked_counterfactual_max_per_cycle": 8,
+    "take_profit_pct": "0.02",
+    "stop_loss_pct": "0.015",
+    "max_hold_hours": 48
+  },
+  "quadrant_strategy": {
+    "enabled": true,
+    "reversal_short_enabled": true,
+    "reversal_short_min_rsi": "80",
+    "reversal_short_require_mtf_5m_bearish": true,
+    "reversal_short_allowed_buckets": [
+      "futuresTradFi",
+      "futuresTopVolume",
+      "configured",
+      "pinned"
+    ],
+    "reversal_short_execution_mode": "shadow",
+    "reversal_short_min_confidence": "0.72",
+    "reversal_short_quote_fraction_mult": "0.50",
+    "reversal_long_enabled": true,
+    "reversal_long_max_rsi": "30",
+    "reversal_long_require_mtf_5m_bullish": true,
+    "reversal_long_allowed_buckets": [
+      "futuresTradFi",
+      "futuresTopVolume",
+      "futuresLosers",
+      "configured",
+      "pinned"
+    ],
+    "reversal_long_execution_mode": "shadow",
+    "reversal_long_min_confidence": "0.72",
+    "reversal_long_quote_fraction_mult": "0.50",
+    "macro_block_gainer_long_on_risk_off": true
+  },
+  "entry_timing": {
+    "enabled": true,
+    "mode": "chase_fill",
+    "trend_pullback_atr_mult": "0.25",
+    "trend_chase_limit_atr_mult": "0.05",
+    "reversal_limit_atr_mult": "0.15",
+    "use_fast_sma_anchor": true,
+    "require_mtf_pullback_for_trend_long": false,
+    "require_mtf_pullback_for_trend_short": false,
+    "block_trend_chase_without_pullback": false,
+    "min_limit_offset_pct": "0.0003",
+    "max_limit_offset_pct": "0.008",
+    "limit_time_in_force": "IOC"
+  },
+  "profitability": {
+    "enabled": true,
+    "regime_filter_mode": "soft",
+    "daily_loss_floor_fraction_of_cap": "0.25",
+    "force_exit_fraction": "0.75",
+    "gainers_allow_range": true,
+    "gainers_allow_squeeze": true,
+    "gainers_allow_trend_down": true,
+    "losers_allow_range": true,
+    "losers_allow_squeeze": true,
+    "losers_allow_trend_up": true
+  }
+}

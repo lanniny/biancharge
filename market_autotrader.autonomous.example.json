@@ -1,0 +1,99 @@
+{
+  "poll_seconds": 60,
+  "ledger_path": "logs/market-autotrader-autonomous-decisions.jsonl",
+  "portfolio": {
+    "cash": {
+      "USDT": "10000"
+    },
+    "positions": {}
+  },
+  "risk": {
+    "mode": "paper",
+    "allow_live_trading": false,
+    "max_trade_quote": "100",
+    "max_position_quote": "800",
+    "min_confidence": "0.62",
+    "max_volatility": "0.10",
+    "max_drawdown": "0.15",
+    "max_daily_trades": 12,
+    "cooldown_seconds": 180,
+    "require_reason_count": 5
+  },
+  "execution": {
+    "mode": "paper",
+    "approval_dir": "approvals"
+  },
+  "strategy": {
+    "fast_window": 8,
+    "slow_window": 21,
+    "momentum_window": 6,
+    "rsi_window": 14,
+    "atr_window": 14,
+    "adx_window": 14,
+    "bb_window": 20,
+    "bb_squeeze_width": "0.045",
+    "adx_range_max": "22",
+    "mtf_resample_5m": 5,
+    "mtf_resample_15m": 15,
+    "min_buy_confidence": "0.70",
+    "min_sell_confidence": "0.62",
+    "buy_quote_fraction": "0.08",
+    "sell_position_fraction": "1.0"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "market": "binance_spot",
+      "base_asset": "BTC",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://api.binance.com",
+        "path": "/api/v3/klines",
+        "interval": "1m",
+        "limit": 120,
+        "timeout_seconds": 12
+      }
+    },
+    {
+      "symbol": "ETHUSDT",
+      "market": "binance_spot",
+      "base_asset": "ETH",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://api.binance.com",
+        "path": "/api/v3/klines",
+        "interval": "1m",
+        "limit": 120,
+        "timeout_seconds": 12
+      }
+    },
+    {
+      "symbol": "SOLUSDT",
+      "market": "binance_spot",
+      "base_asset": "SOL",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "binance",
+        "base_url": "https://api.binance.com",
+        "path": "/api/v3/klines",
+        "interval": "1m",
+        "limit": 120,
+        "timeout_seconds": 12
+      }
+    }
+  ],
+  "market_discovery": {
+    "enabled": true,
+    "min_quote_volume_usdt": "5000000",
+    "spot_top_by_volume": 25,
+    "futures_top_by_volume": 25,
+    "max_gainers": 12,
+    "max_losers": 12,
+    "max_analyze_per_cycle": 12,
+    "include_holdings": true,
+    "trade_discovered": false,
+    "snapshot_path": "logs/market-discovery-latest.json"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "poll_seconds": 60,
+  "ledger_path": "logs/market-autotrader-approval-decisions.jsonl",
+  "portfolio": {
+    "cash": {
+      "USDT": "10000",
+      "USD": "10000"
+    },
+    "positions": {}
+  },
+  "risk": {
+    "mode": "approval_required",
+    "allow_live_trading": false,
+    "max_trade_quote": "100",
+    "max_position_quote": "500",
+    "min_confidence": "0.60",
+    "max_volatility": "0.08",
+    "max_drawdown": "0.12",
+    "max_daily_trades": 4,
+    "cooldown_seconds": 300,
+    "require_reason_count": 3
+  },
+  "execution": {
+    "mode": "approval_required",
+    "approval_dir": "approvals"
+  },
+  "strategy": {
+    "fast_window": 8,
+    "slow_window": 21,
+    "momentum_window": 6,
+    "rsi_window": 14,
+    "min_buy_confidence": "0.60",
+    "min_sell_confidence": "0.62",
+    "buy_quote_fraction": "0.01",
+    "sell_position_fraction": "1.0"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "market": "crypto_spot_demo",
+      "base_asset": "BTC",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "static",
+        "bars": [
+          {"timestamp": 1, "open": "100", "high": "101", "low": "99", "close": "100", "volume": "1000"},
+          {"timestamp": 2, "open": "101", "high": "102", "low": "100", "close": "101", "volume": "1020"},
+          {"timestamp": 3, "open": "102", "high": "103", "low": "101", "close": "102", "volume": "1040"},
+          {"timestamp": 4, "open": "103", "high": "104", "low": "102", "close": "103", "volume": "1060"},
+          {"timestamp": 5, "open": "104", "high": "105", "low": "103", "close": "104", "volume": "1080"},
+          {"timestamp": 6, "open": "105", "high": "106", "low": "104", "close": "105", "volume": "1100"},
+          {"timestamp": 7, "open": "106", "high": "107", "low": "105", "close": "106", "volume": "1120"},
+          {"timestamp": 8, "open": "107", "high": "108", "low": "106", "close": "107", "volume": "1140"},
+          {"timestamp": 9, "open": "108", "high": "109", "low": "107", "close": "108", "volume": "1160"},
+          {"timestamp": 10, "open": "109", "high": "110", "low": "108", "close": "109", "volume": "1180"},
+          {"timestamp": 11, "open": "110", "high": "111", "low": "109", "close": "110", "volume": "1200"},
+          {"timestamp": 12, "open": "111", "high": "112", "low": "110", "close": "111", "volume": "1220"},
+          {"timestamp": 13, "open": "112", "high": "113", "low": "111", "close": "112", "volume": "1240"},
+          {"timestamp": 14, "open": "113", "high": "114", "low": "112", "close": "113", "volume": "1260"},
+          {"timestamp": 15, "open": "114", "high": "115", "low": "113", "close": "114", "volume": "1280"},
+          {"timestamp": 16, "open": "115", "high": "116", "low": "114", "close": "115", "volume": "1300"},
+          {"timestamp": 17, "open": "116", "high": "117", "low": "115", "close": "116", "volume": "1320"},
+          {"timestamp": 18, "open": "117", "high": "118", "low": "116", "close": "117", "volume": "1340"},
+          {"timestamp": 19, "open": "118", "high": "119", "low": "117", "close": "118", "volume": "1360"},
+          {"timestamp": 20, "open": "119", "high": "120", "low": "118", "close": "119", "volume": "1380"},
+          {"timestamp": 21, "open": "120", "high": "121", "low": "119", "close": "120", "volume": "1400"},
+          {"timestamp": 22, "open": "121", "high": "122", "low": "120", "close": "121", "volume": "1420"},
+          {"timestamp": 23, "open": "122", "high": "123", "low": "121", "close": "122", "volume": "1440"},
+          {"timestamp": 24, "open": "123", "high": "124", "low": "122", "close": "123", "volume": "1460"},
+          {"timestamp": 25, "open": "124", "high": "125", "low": "123", "close": "124", "volume": "1480"},
+          {"timestamp": 26, "open": "123.6", "high": "124.8", "low": "123.2", "close": "124", "volume": "1600"},
+          {"timestamp": 27, "open": "122.6", "high": "123.8", "low": "122.2", "close": "123", "volume": "1630"},
+          {"timestamp": 28, "open": "124.6", "high": "125.8", "low": "124.2", "close": "125", "volume": "1660"},
+          {"timestamp": 29, "open": "124.1", "high": "125.3", "low": "123.7", "close": "124.5", "volume": "1690"},
+          {"timestamp": 30, "open": "125.6", "high": "126.8", "low": "125.2", "close": "126", "volume": "1720"},
+          {"timestamp": 31, "open": "125.1", "high": "126.3", "low": "124.7", "close": "125.5", "volume": "1750"},
+          {"timestamp": 32, "open": "126.6", "high": "127.8", "low": "126.2", "close": "127", "volume": "1780"},
+          {"timestamp": 33, "open": "126.1", "high": "127.3", "low": "125.7", "close": "126.5", "volume": "1810"},
+          {"timestamp": 34, "open": "127.6", "high": "128.8", "low": "127.2", "close": "128", "volume": "1840"},
+          {"timestamp": 35, "open": "127.1", "high": "128.3", "low": "126.7", "close": "127.5", "volume": "1870"},
+          {"timestamp": 36, "open": "128.6", "high": "129.8", "low": "128.2", "close": "129", "volume": "1900"},
+          {"timestamp": 37, "open": "128.1", "high": "129.3", "low": "127.7", "close": "128.5", "volume": "1930"},
+          {"timestamp": 38, "open": "129.6", "high": "130.8", "low": "129.2", "close": "130", "volume": "1960"},
+          {"timestamp": 39, "open": "130.6", "high": "131.8", "low": "130.2", "close": "131", "volume": "1990"}
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "poll_seconds": 60,
+  "ledger_path": "logs/market-autotrader-decisions.jsonl",
+  "portfolio": {
+    "cash": {
+      "USDT": "10000",
+      "USD": "10000"
+    },
+    "positions": {}
+  },
+  "risk": {
+    "mode": "paper",
+    "allow_live_trading": false,
+    "max_trade_quote": "250",
+    "max_position_quote": "1000",
+    "min_confidence": "0.60",
+    "max_volatility": "0.08",
+    "max_drawdown": "0.12",
+    "max_daily_trades": 8,
+    "cooldown_seconds": 300,
+    "require_reason_count": 3
+  },
+  "execution": {
+    "mode": "paper",
+    "approval_dir": "approvals"
+  },
+  "strategy": {
+    "fast_window": 8,
+    "slow_window": 21,
+    "momentum_window": 6,
+    "rsi_window": 14,
+    "min_buy_confidence": "0.68",
+    "min_sell_confidence": "0.62",
+    "buy_quote_fraction": "0.10",
+    "sell_position_fraction": "1.0"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "market": "crypto_spot_demo",
+      "base_asset": "BTC",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "synthetic",
+        "trend": "up",
+        "count": 80,
+        "start": "62000",
+        "step": "200",
+        "pullback_every": 5,
+        "pullback_step": "120",
+        "volume": "1000",
+        "volume_step": "50"
+      }
+    },
+    {
+      "symbol": "ETHUSDT",
+      "market": "crypto_spot_demo",
+      "base_asset": "ETH",
+      "quote_asset": "USDT",
+      "provider": {
+        "type": "synthetic",
+        "trend": "flat",
+        "count": 80,
+        "start": "3500",
+        "step": "6",
+        "volume": "900",
+        "volume_step": "1"
+      }
+    },
+    {
+      "symbol": "AAPL",
+      "market": "us_equity_demo",
+      "base_asset": "AAPL",
+      "quote_asset": "USD",
+      "provider": {
+        "type": "synthetic",
+        "trend": "down",
+        "count": 80,
+        "start": "220",
+        "step": "0.45",
+        "volume": "100000",
+        "volume_step": "100"
+      }
+    }
+  ]
+}
