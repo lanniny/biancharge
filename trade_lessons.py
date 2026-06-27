@@ -34,6 +34,15 @@ class TradeLessonsConfig:
     block_short_positive_momentum: bool = True
     block_short_from_gainers_bucket: bool = True
     min_momentum_for_short: Decimal = Decimal("0")
+    late_gainer_min_24h_change: Decimal = Decimal("0.15")
+    late_gainer_max_rsi_long: Decimal = Decimal("70")
+    late_gainer_min_fusion_bull_pct: Decimal = Decimal("0.75")
+    require_late_gainer_mtf15_bullish: bool = True
+    require_late_gainer_1m_bullish: bool = True
+    loser_long_min_24h_drop: Decimal = Decimal("0.10")
+    require_loser_long_5m_bullish: bool = True
+    loser_short_min_24h_drop: Decimal = Decimal("0.10")
+    loser_short_oversold_rsi: Decimal = Decimal("30")
     # F4: block counter-trend LONGs into the day's biggest losers (futuresLosers
     # bucket). Data (shadow, 31 trades): 29% win rate, net -1.45 USDT — the weakest
     # LONG cohort, "catching a falling knife". SHORTs from the same bucket are the
@@ -45,6 +54,11 @@ class TradeLessonsConfig:
     min_lesson_win_rate_block: Decimal = Decimal("0.35")
     max_lesson_profit_factor_block: Decimal = Decimal("0.85")
     profitable_edge_profit_factor: Decimal = Decimal("1.20")
+    fast_lesson_block_enabled: bool = True
+    fast_lesson_min_sample: int = 1
+    fast_lesson_total_loss: Decimal = Decimal("-1.0")
+    fast_lesson_max_profit_factor: Decimal = Decimal("0.25")
+    fast_lesson_max_win_rate: Decimal = Decimal("0.10")
 
 
 def trade_lessons_from_config(raw: dict[str, Any] | None) -> TradeLessonsConfig:
@@ -64,12 +78,26 @@ def trade_lessons_from_config(raw: dict[str, Any] | None) -> TradeLessonsConfig:
         block_short_positive_momentum=bool(raw.get("block_short_positive_momentum", True)),
         block_short_from_gainers_bucket=bool(raw.get("block_short_from_gainers_bucket", True)),
         min_momentum_for_short=decimal_from(raw.get("min_momentum_for_short", "0")),
+        late_gainer_min_24h_change=decimal_from(raw.get("late_gainer_min_24h_change", "0.15")),
+        late_gainer_max_rsi_long=decimal_from(raw.get("late_gainer_max_rsi_long", "70")),
+        late_gainer_min_fusion_bull_pct=decimal_from(raw.get("late_gainer_min_fusion_bull_pct", "0.75")),
+        require_late_gainer_mtf15_bullish=bool(raw.get("require_late_gainer_mtf15_bullish", True)),
+        require_late_gainer_1m_bullish=bool(raw.get("require_late_gainer_1m_bullish", True)),
+        loser_long_min_24h_drop=decimal_from(raw.get("loser_long_min_24h_drop", "0.10")),
+        require_loser_long_5m_bullish=bool(raw.get("require_loser_long_5m_bullish", True)),
+        loser_short_min_24h_drop=decimal_from(raw.get("loser_short_min_24h_drop", "0.10")),
+        loser_short_oversold_rsi=decimal_from(raw.get("loser_short_oversold_rsi", "30")),
         block_long_from_losers_bucket=bool(raw.get("block_long_from_losers_bucket", True)),
         long_losers_bypass_confidence=decimal_from(raw.get("long_losers_bypass_confidence", "0.95")),
         min_lesson_sample_for_block=int(raw.get("min_lesson_sample_for_block", 12)),
         min_lesson_win_rate_block=decimal_from(raw.get("min_lesson_win_rate_block", "0.35")),
         max_lesson_profit_factor_block=decimal_from(raw.get("max_lesson_profit_factor_block", "0.85")),
         profitable_edge_profit_factor=decimal_from(raw.get("profitable_edge_profit_factor", "1.20")),
+        fast_lesson_block_enabled=bool(raw.get("fast_lesson_block_enabled", True)),
+        fast_lesson_min_sample=int(raw.get("fast_lesson_min_sample", 1)),
+        fast_lesson_total_loss=decimal_from(raw.get("fast_lesson_total_loss", "-1.0")),
+        fast_lesson_max_profit_factor=decimal_from(raw.get("fast_lesson_max_profit_factor", "0.25")),
+        fast_lesson_max_win_rate=decimal_from(raw.get("fast_lesson_max_win_rate", "0.10")),
     )
 
 
@@ -81,6 +109,24 @@ LESSON_RULES: dict[str, str] = {
     "short_from_gainers_bucket": "short opened from gainers discovery bucket",
     "short_positive_momentum": "short opened while immediate momentum is not negative enough",
     "long_from_losers_bucket": "long opened from losers discovery bucket",
+    "long_gainer_mtf15_conflict": "late gainer long while 15m trend is not bullish",
+    "long_gainer_overheated": "late gainer long with overheated RSI / weak immediate confirmation",
+    "long_loser_without_5m_confirmation": "losers-bucket long before 5m reversal confirmation",
+    "short_loser_oversold_chase": "losers-bucket short after a large oversold drop",
+}
+
+FAST_BLOCK_RULE_IDS = {
+    "long_gainer_mtf15_conflict",
+    "long_gainer_overheated",
+    "long_loser_without_5m_confirmation",
+    "short_loser_oversold_chase",
+}
+
+STATIC_SAFETY_RULE_IDS = {
+    "long_gainer_mtf15_conflict",
+    "long_gainer_overheated",
+    "long_loser_without_5m_confirmation",
+    "short_loser_oversold_chase",
 }
 
 
@@ -89,36 +135,75 @@ def _bucket_has(bucket: str, name: str) -> bool:
     return name in bucket_name or bucket_name == f"futures{name}"
 
 
+def _ctx_value(ctx: dict[str, Any], *keys: str, default: Any = "") -> Any:
+    for key in keys:
+        value = ctx.get(key)
+        if value not in (None, ""):
+            return value
+    return default
+
+
 def lesson_rule_ids_for_outcome(row: dict[str, Any], cfg: TradeLessonsConfig | None = None) -> set[str]:
     cfg = cfg or TradeLessonsConfig()
     ctx = row.get("openContext") or {}
     side = str(row.get("positionSide", "LONG")).upper()
     regime = str(ctx.get("regime") or row.get("regime") or "").lower()
     bucket = str(ctx.get("bucket") or "")
-    change = decimal_from(ctx.get("priceChangePct24h"))
+    change = decimal_from(_ctx_value(ctx, "priceChangePct24h", "price_change_pct_24h"))
     rsi = decimal_from(ctx.get("rsi"))
     momentum = decimal_from(ctx.get("momentum"))
+    mtf_1m = str(_ctx_value(ctx, "mtf1m", "mtf_1m")).lower()
+    mtf_5m = str(_ctx_value(ctx, "mtf5m", "mtf_5m")).lower()
+    mtf_15m = str(_ctx_value(ctx, "mtf15m", "mtf_15m")).lower()
     rules: set[str] = set()
+    gainer_bucket = _bucket_has(bucket, "Gainers")
+    loser_bucket = _bucket_has(bucket, "Losers")
     if side == "SHORT" and cfg.block_short_on_pump_pct > 0 and change >= cfg.block_short_on_pump_pct:
         rules.add("short_on_pump")
     if side == "SHORT" and regime == "squeeze":
         rules.add("short_in_squeeze")
     if (
         side == "LONG"
-        and _bucket_has(bucket, "Gainers")
+        and gainer_bucket
         and cfg.block_long_chase_gainer_pct > 0
         and change >= cfg.block_long_chase_gainer_pct
         and abs(momentum) < cfg.chase_long_min_momentum
     ):
         rules.add("long_chase_gainer_weak_momentum")
+    if side == "LONG" and gainer_bucket and change >= cfg.late_gainer_min_24h_change:
+        if cfg.require_late_gainer_mtf15_bullish and mtf_15m and mtf_15m != "bullish":
+            rules.add("long_gainer_mtf15_conflict")
+        if (
+            cfg.late_gainer_max_rsi_long > 0
+            and rsi >= cfg.late_gainer_max_rsi_long
+            and (cfg.require_late_gainer_1m_bullish and mtf_1m != "bullish")
+        ):
+            rules.add("long_gainer_overheated")
     if side == "SHORT" and cfg.block_short_oversold_rsi > 0 and rsi > 0 and rsi <= cfg.block_short_oversold_rsi:
         rules.add("short_oversold")
     if side == "SHORT" and cfg.block_short_from_gainers_bucket and _bucket_has(bucket, "Gainers"):
         rules.add("short_from_gainers_bucket")
     if side == "SHORT" and cfg.block_short_positive_momentum and momentum > cfg.min_momentum_for_short:
         rules.add("short_positive_momentum")
-    if side == "LONG" and cfg.block_long_from_losers_bucket and _bucket_has(bucket, "Losers"):
+    if side == "LONG" and cfg.block_long_from_losers_bucket and loser_bucket:
         rules.add("long_from_losers_bucket")
+    if (
+        side == "LONG"
+        and loser_bucket
+        and cfg.require_loser_long_5m_bullish
+        and change <= -cfg.loser_long_min_24h_drop
+        and mtf_5m != "bullish"
+    ):
+        rules.add("long_loser_without_5m_confirmation")
+    if (
+        side == "SHORT"
+        and loser_bucket
+        and change <= -cfg.loser_short_min_24h_drop
+        and cfg.loser_short_oversold_rsi > 0
+        and rsi > 0
+        and rsi <= cfg.loser_short_oversold_rsi
+    ):
+        rules.add("short_loser_oversold_chase")
     return rules
 
 
@@ -157,13 +242,22 @@ def _has_profitable_edge(stat: dict[str, Any], *, min_profit_factor: Decimal) ->
     return total_pnl > 0 and profit_factor >= min_profit_factor
 
 
-def lesson_rule_status(stat: dict[str, Any], cfg: TradeLessonsConfig) -> str:
+def lesson_rule_status(stat: dict[str, Any], cfg: TradeLessonsConfig, rule_id: str = "") -> str:
     sample = int(stat.get("sampleSize", 0))
     total_pnl = decimal_from(stat.get("totalPnl", "0"))
     win_rate = decimal_from(stat.get("winRate", "0"))
     profit_factor = decimal_from(stat.get("profitFactor", "0"))
     if _has_profitable_edge(stat, min_profit_factor=cfg.profitable_edge_profit_factor):
         return "allowed_profitable_edge"
+    if (
+        cfg.fast_lesson_block_enabled
+        and rule_id in FAST_BLOCK_RULE_IDS
+        and sample >= cfg.fast_lesson_min_sample
+        and total_pnl <= cfg.fast_lesson_total_loss
+        and win_rate <= cfg.fast_lesson_max_win_rate
+        and profit_factor <= cfg.fast_lesson_max_profit_factor
+    ):
+        return "cooldown_block"
     if sample < cfg.min_lesson_sample_for_block:
         return "observing"
     if total_pnl < 0 and (profit_factor <= cfg.max_lesson_profit_factor_block or win_rate < cfg.min_lesson_win_rate_block):
@@ -173,16 +267,21 @@ def lesson_rule_status(stat: dict[str, Any], cfg: TradeLessonsConfig) -> str:
     return "observing"
 
 
-def _tag_outcome(row: dict[str, Any]) -> list[str]:
+def _tag_outcome(row: dict[str, Any], cfg: TradeLessonsConfig | None = None) -> list[str]:
+    cfg = cfg or TradeLessonsConfig()
     ctx = row.get("openContext") or {}
     tags: list[str] = []
     bucket = str(ctx.get("bucket") or "")
     regime = str(ctx.get("regime") or row.get("regime") or "")
     side = str(row.get("positionSide", "LONG")).upper()
-    change = decimal_from(ctx.get("priceChangePct24h"))
+    change = decimal_from(_ctx_value(ctx, "priceChangePct24h", "price_change_pct_24h"))
     conf = decimal_from(ctx.get("confidence"))
     rsi = decimal_from(ctx.get("rsi"))
     momentum = decimal_from(ctx.get("momentum"))
+    mtf_1m = str(_ctx_value(ctx, "mtf1m", "mtf_1m")).lower()
+    mtf_5m = str(_ctx_value(ctx, "mtf5m", "mtf_5m")).lower()
+    mtf_15m = str(_ctx_value(ctx, "mtf15m", "mtf_15m")).lower()
+    mfe = decimal_from(ctx.get("mfePct")) if ctx.get("mfePct") not in (None, "") else Decimal("0")
     pnl = _outcome_pnl(row)
 
     if "Gainers" in bucket or bucket == "futuresGainers":
@@ -197,8 +296,19 @@ def _tag_outcome(row: dict[str, Any]) -> list[str]:
         tags.append("regime_trend_down")
     if side == "SHORT" and change >= Decimal("0.50"):
         tags.append("short_into_pump")
-    if side == "LONG" and change >= Decimal("0.15") and abs(momentum) < Decimal("0.02"):
+    if side == "LONG" and change >= cfg.block_long_chase_gainer_pct and abs(momentum) < cfg.chase_long_min_momentum:
         tags.append("long_chase_weak_momentum")
+    if side == "LONG" and ("Gainers" in bucket or bucket == "futuresGainers") and change >= cfg.late_gainer_min_24h_change:
+        if mtf_15m and mtf_15m != "bullish":
+            tags.append("mtf15_conflict")
+        if rsi >= cfg.late_gainer_max_rsi_long and mtf_1m != "bullish":
+            tags.append("overheated_no_1m_confirmation")
+    if side == "LONG" and ("Losers" in bucket or bucket == "futuresLosers") and change <= -cfg.loser_long_min_24h_drop and mtf_5m != "bullish":
+        tags.append("loser_long_no_5m_confirmation")
+    if side == "SHORT" and ("Losers" in bucket or bucket == "futuresLosers") and change <= -cfg.loser_short_min_24h_drop and rsi > 0 and rsi <= cfg.loser_short_oversold_rsi:
+        tags.append("loser_short_oversold_chase")
+    if pnl < 0 and mfe >= Decimal("0.01"):
+        tags.append("profit_giveback_loss")
     if side == "SHORT" and regime == "squeeze":
         tags.append("short_in_squeeze")
     if side == "SHORT" and rsi > 0 and rsi <= Decimal("30"):
@@ -227,6 +337,14 @@ def _lesson_text(row: dict[str, Any], tags: list[str]) -> str:
         return f"{sym} 亏损：在 24h 已暴涨后仍开空，被轧空止损。"
     if "long_chase_weak_momentum" in tags:
         return f"{sym} 亏损：涨幅榜追高开多但动量衰竭，典型 pump 回落。"
+    if "mtf15_conflict" in tags:
+        return f"{sym} 亏损：涨幅榜追多但 15m 趋势未确认，入场过晚。"
+    if "loser_long_no_5m_confirmation" in tags:
+        return f"{sym} 亏损：跌幅榜反转开多但 5m 未转多，反弹确认不足。"
+    if "loser_short_oversold_chase" in tags:
+        return f"{sym} 亏损：跌幅榜大跌后 RSI 超卖仍追空，反弹扫损。"
+    if "profit_giveback_loss" in tags:
+        return f"{sym} 亏损：入场后一度有浮盈但未锁住，利润保护偏慢。"
     if "short_in_squeeze" in tags:
         return f"{sym} 亏损：squeeze 区间开空，方向不明易被扫止损。"
     if "short_oversold" in tags:
@@ -245,7 +363,7 @@ def build_lessons_document(outcomes: list[dict[str, Any]], cfg: TradeLessonsConf
     rows_by_rule: dict[str, list[dict[str, Any]]] = {rule_id: [] for rule_id in LESSON_RULES}
 
     for row in outcomes:
-        tags = _tag_outcome(row)
+        tags = _tag_outcome(row, cfg)
         for rule_id in lesson_rule_ids_for_outcome(row, cfg):
             rows_by_rule.setdefault(rule_id, []).append(row)
         entry = {
@@ -275,12 +393,12 @@ def build_lessons_document(outcomes: list[dict[str, Any]], cfg: TradeLessonsConf
     for rule_id, rows in rows_by_rule.items():
         stat = _edge_stats(rows)
         stat["description"] = LESSON_RULES.get(rule_id, rule_id)
-        stat["status"] = lesson_rule_status(stat, cfg)
+        stat["status"] = lesson_rule_status(stat, cfg, rule_id=rule_id)
         rule_stats[rule_id] = stat
     active_rules = [
         {
             "id": rule_id,
-            "enabled": stat.get("status") == "hard_block",
+            "enabled": stat.get("status") in {"hard_block", "cooldown_block"},
             "status": stat.get("status"),
             "description": stat.get("description"),
             "sampleSize": stat.get("sampleSize"),
@@ -289,7 +407,7 @@ def build_lessons_document(outcomes: list[dict[str, Any]], cfg: TradeLessonsConf
             "profitFactor": stat.get("profitFactor"),
         }
         for rule_id, stat in rule_stats.items()
-        if stat.get("status") in {"hard_block", "soft_penalty"}
+        if stat.get("status") in {"hard_block", "cooldown_block", "soft_penalty"}
     ]
 
     return {
@@ -360,6 +478,9 @@ def trade_lesson_block_reasons(
     bucket: str,
     fusion_bull_pct: Decimal | None = None,
     entry_quadrant: str = "",
+    mtf_1m: str = "",
+    mtf_5m: str = "",
+    mtf_15m: str = "",
     lesson_stats: dict[str, Any] | None = None,
 ) -> list[str]:
     if not cfg.enabled or reduce_only or position_qty != 0:
@@ -367,12 +488,18 @@ def trade_lesson_block_reasons(
     blocked: list[str] = []
     regime_kind = str(regime or "").lower()
     bucket_name = str(bucket or "")
+    mtf_1m = str(mtf_1m or "").lower()
+    mtf_5m = str(mtf_5m or "").lower()
+    mtf_15m = str(mtf_15m or "").lower()
 
     def rule_blocks(rule_id: str) -> bool:
         if lesson_stats is None:
             return True
         stat = lesson_stats.get(rule_id) or {}
-        return lesson_rule_status(stat, cfg) == "hard_block"
+        status = lesson_rule_status(stat, cfg, rule_id=rule_id)
+        if rule_id in STATIC_SAFETY_RULE_IDS:
+            return status != "allowed_profitable_edge"
+        return status in {"hard_block", "cooldown_block"}
 
     def rule_note(rule_id: str) -> str:
         stat = (lesson_stats or {}).get(rule_id) or {}
@@ -424,19 +551,42 @@ def trade_lesson_block_reasons(
         and change_24h >= cfg.block_long_chase_gainer_pct
         and abs(momentum) < cfg.chase_long_min_momentum
     ):
-        fusion = fusion_bull_pct if fusion_bull_pct is not None else Decimal("0")
-        bypass = (
-            entry_quadrant == "trend_long"
-            and fusion >= cfg.chase_long_fusion_bypass
-            and confidence >= Decimal("0.75")
-        )
-        if not bypass:
-            if rule_blocks("long_chase_gainer_weak_momentum"):
-                blocked.append(
-                    f"Trade lesson: gainer chase blocked — 24h {_format_pct(change_24h)} "
-                    f"but momentum {_format_pct(momentum)} weak (PORTAL 类教训)."
-                    f"{rule_note('long_chase_gainer_weak_momentum')}"
-                )
+        if rule_blocks("long_chase_gainer_weak_momentum"):
+            blocked.append(
+                f"Trade lesson: gainer chase blocked — 24h {_format_pct(change_24h)} "
+                f"but momentum {_format_pct(momentum)} weak (PORTAL 类教训)."
+                f"{rule_note('long_chase_gainer_weak_momentum')}"
+            )
+
+    if (
+        order_action == "BUY"
+        and ("Gainers" in bucket_name or bucket_name == "futuresGainers")
+        and cfg.late_gainer_min_24h_change > 0
+        and change_24h >= cfg.late_gainer_min_24h_change
+    ):
+        if (
+            cfg.require_late_gainer_mtf15_bullish
+            and mtf_15m
+            and mtf_15m != "bullish"
+            and rule_blocks("long_gainer_mtf15_conflict")
+        ):
+            blocked.append(
+                f"Trade lesson: late gainer long blocked — 24h {_format_pct(change_24h)} "
+                f"but 15m is {mtf_15m}, not bullish."
+                f"{rule_note('long_gainer_mtf15_conflict')}"
+            )
+        if (
+            cfg.late_gainer_max_rsi_long > 0
+            and rsi >= cfg.late_gainer_max_rsi_long
+            and cfg.require_late_gainer_1m_bullish
+            and mtf_1m != "bullish"
+            and rule_blocks("long_gainer_overheated")
+        ):
+            blocked.append(
+                f"Trade lesson: overheated gainer long blocked — RSI {rsi:.1f} "
+                f"with 1m={mtf_1m or 'neutral'}; wait for fresh confirmation."
+                f"{rule_note('long_gainer_overheated')}"
+            )
 
     if (
         order_action == "SELL"
@@ -484,19 +634,58 @@ def trade_lesson_block_reasons(
     ):
         confirmed_negative_edge = (
             lesson_stats is not None
-            and lesson_rule_status((lesson_stats or {}).get("long_from_losers_bucket") or {}, cfg) == "hard_block"
+            and lesson_rule_status(
+                (lesson_stats or {}).get("long_from_losers_bucket") or {},
+                cfg,
+                rule_id="long_from_losers_bucket",
+            )
+            in {"hard_block", "cooldown_block"}
         )
-        if confidence >= cfg.long_losers_bypass_confidence and not confirmed_negative_edge:
+        reversal_confirmed = mtf_5m == "bullish"
+        if confidence >= cfg.long_losers_bypass_confidence and reversal_confirmed and not confirmed_negative_edge:
             return blocked
         suffix = (
             "confirmed negative expectancy; confidence-only bypass disabled"
             if confirmed_negative_edge
-            else f"confidence {confidence:.2f} < {cfg.long_losers_bypass_confidence}"
+            else (
+                f"5m={mtf_5m or 'neutral'} lacks reversal confirmation"
+                if confidence >= cfg.long_losers_bypass_confidence
+                else f"confidence {confidence:.2f} < {cfg.long_losers_bypass_confidence}"
+            )
         )
         blocked.append(
             f"Trade lesson: block long from losers bucket — 逆势抄底下跌币历史 29% 胜率 "
             f"({suffix})."
             f"{rule_note('long_from_losers_bucket')}"
+        )
+
+    if (
+        order_action == "BUY"
+        and cfg.require_loser_long_5m_bullish
+        and ("Losers" in bucket_name or bucket_name == "futuresLosers")
+        and change_24h <= -cfg.loser_long_min_24h_drop
+        and mtf_5m != "bullish"
+        and rule_blocks("long_loser_without_5m_confirmation")
+    ):
+        blocked.append(
+            f"Trade lesson: losers reversal long blocked — 24h {_format_pct(change_24h)} "
+            f"and 5m={mtf_5m or 'neutral'}; wait for 5m bullish confirmation."
+            f"{rule_note('long_loser_without_5m_confirmation')}"
+        )
+
+    if (
+        order_action == "SELL"
+        and ("Losers" in bucket_name or bucket_name == "futuresLosers")
+        and change_24h <= -cfg.loser_short_min_24h_drop
+        and cfg.loser_short_oversold_rsi > 0
+        and rsi > 0
+        and rsi <= cfg.loser_short_oversold_rsi
+        and rule_blocks("short_loser_oversold_chase")
+    ):
+        blocked.append(
+            f"Trade lesson: oversold loser short blocked — 24h {_format_pct(change_24h)}, "
+            f"RSI {rsi:.1f}; wait for bounce failure before shorting."
+            f"{rule_note('short_loser_oversold_chase')}"
         )
 
     return blocked
@@ -517,7 +706,7 @@ def trade_lessons_rationale_block(doc: dict[str, Any]) -> dict[str, Any]:
             "profitFactor": stat.get("profitFactor"),
         }
         for rule_id, stat in rule_stats.items()
-        if stat.get("sampleSize") or stat.get("status") in {"hard_block", "soft_penalty", "allowed_profitable_edge"}
+        if stat.get("sampleSize") or stat.get("status") in {"hard_block", "cooldown_block", "soft_penalty", "allowed_profitable_edge"}
     ]
     return {
         "enabled": True,

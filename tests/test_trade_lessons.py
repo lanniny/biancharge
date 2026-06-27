@@ -100,7 +100,7 @@ def test_chase_long_fusion_bypass():
         fusion_bull_pct=Decimal("0.60"),
         entry_quadrant="trend_long",
     )
-    assert not any("gainer chase blocked" in r for r in reasons)
+    assert any("gainer chase blocked" in r for r in reasons)
 
 
 def test_build_lessons_from_portal_loss():
@@ -122,6 +122,113 @@ def test_build_lessons_from_portal_loss():
     doc = build_lessons_document(outcomes)
     assert doc["summary"]["losses"] == 1
     assert "long_chase_weak_momentum" in doc["losses"][0]["tags"]
+
+
+def test_aave_like_gainer_long_blocks_on_late_mtf15_conflict():
+    cfg = trade_lessons_from_config({"enabled": True})
+    reasons = trade_lesson_block_reasons(
+        cfg=cfg,
+        order_action="BUY",
+        reduce_only=False,
+        position_qty=Decimal("0"),
+        regime="trend_up",
+        change_24h=Decimal("0.17504"),
+        momentum=Decimal("0.01572"),
+        rsi=Decimal("70.26"),
+        confidence=Decimal("0.95"),
+        bucket="futuresGainers",
+        fusion_bull_pct=Decimal("0.7292"),
+        entry_quadrant="trend_long",
+        mtf_1m="neutral",
+        mtf_5m="bullish",
+        mtf_15m="bearish",
+        lesson_stats={"long_gainer_mtf15_conflict": {"sampleSize": 0}},
+    )
+    joined = " ".join(reasons)
+    assert "late gainer long blocked" in joined
+    assert "15m is bearish" in joined
+
+
+def test_ousdt_like_loser_long_requires_5m_confirmation():
+    cfg = trade_lessons_from_config({"enabled": True})
+    reasons = trade_lesson_block_reasons(
+        cfg=cfg,
+        order_action="BUY",
+        reduce_only=False,
+        position_qty=Decimal("0"),
+        regime="trend_up",
+        change_24h=Decimal("-0.18596"),
+        momentum=Decimal("-0.00863"),
+        rsi=Decimal("56.1"),
+        confidence=Decimal("0.99"),
+        bucket="futuresLosers",
+        entry_quadrant="trend_long",
+        mtf_1m="bullish",
+        mtf_5m="neutral",
+        mtf_15m="bullish",
+        lesson_stats={"long_loser_without_5m_confirmation": {"sampleSize": 0}},
+    )
+    joined = " ".join(reasons)
+    assert "losers bucket" in joined
+    assert "5m=neutral" in joined
+    assert "losers reversal long blocked" in joined
+
+
+def test_rif_like_loser_short_blocks_oversold_chase():
+    cfg = trade_lessons_from_config({"enabled": True, "loser_short_oversold_rsi": "30"})
+    reasons = trade_lesson_block_reasons(
+        cfg=cfg,
+        order_action="SELL",
+        reduce_only=False,
+        position_qty=Decimal("0"),
+        regime="trend_down",
+        change_24h=Decimal("-0.1462"),
+        momentum=Decimal("-0.0127"),
+        rsi=Decimal("27.94"),
+        confidence=Decimal("1"),
+        bucket="futuresLosers",
+        entry_quadrant="trend_short",
+        mtf_1m="bearish",
+        mtf_5m="bearish",
+        mtf_15m="bearish",
+        lesson_stats={"short_loser_oversold_chase": {"sampleSize": 0}},
+    )
+    assert any("oversold loser short blocked" in r for r in reasons)
+
+
+def test_lessons_document_counts_aave_like_late_gainer_rule():
+    cfg = trade_lessons_from_config({"enabled": True, "fast_lesson_total_loss": "-1.0"})
+    doc = build_lessons_document(
+        [
+            {
+                "symbol": "AAVEUSDT",
+                "positionSide": "LONG",
+                "netPnl": "-1.1220",
+                "realizedPnl": "-1.1220",
+                "openContext": {
+                    "bucket": "futuresGainers",
+                    "regime": "trend_up",
+                    "priceChangePct24h": "0.17504",
+                    "confidence": "0.95",
+                    "rsi": "70.26",
+                    "momentum": "0.01572",
+                    "fusionBullPct": "0.7292",
+                    "mtf1m": "neutral",
+                    "mtf5m": "bullish",
+                    "mtf15m": "bearish",
+                    "mfePct": "0.0001",
+                    "maePct": "-0.0141",
+                },
+            }
+        ],
+        cfg,
+    )
+    mtf_stat = doc["ruleStats"]["long_gainer_mtf15_conflict"]
+    weak_stat = doc["ruleStats"]["long_chase_gainer_weak_momentum"]
+    assert mtf_stat["sampleSize"] == 1
+    assert mtf_stat["status"] == "cooldown_block"
+    assert weak_stat["sampleSize"] == 1
+    assert "mtf15_conflict" in doc["losses"][0]["tags"]
 
 
 def test_early_trend_long_win_tagged():

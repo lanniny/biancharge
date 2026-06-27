@@ -670,7 +670,7 @@ class F4LongLosersGateTests(unittest.TestCase):
     """F4: block counter-trend LONGs into the futuresLosers bucket (29% WR, -1.45)
     without touching the profitable SHORT flow or the winning Gainers LONGs."""
 
-    def _block(self, *, action, bucket, confidence):
+    def _block(self, *, action, bucket, confidence, mtf_5m="neutral"):
         from trade_lessons import trade_lessons_from_config, trade_lesson_block_reasons
 
         cfg = trade_lessons_from_config({"enabled": True})
@@ -685,6 +685,7 @@ class F4LongLosersGateTests(unittest.TestCase):
             rsi=Decimal("35"),
             confidence=Decimal(str(confidence)),
             bucket=bucket,
+            mtf_5m=mtf_5m,
         )
         return [r for r in reasons if "losers bucket" in r]
 
@@ -700,8 +701,8 @@ class F4LongLosersGateTests(unittest.TestCase):
         self.assertFalse(self._block(action="BUY", bucket="futuresGainers", confidence="0.80"))
 
     def test_high_conviction_reversal_bypass(self):
-        # A genuine high-conviction reversal can still open.
-        self.assertFalse(self._block(action="BUY", bucket="futuresLosers", confidence="0.96"))
+        # A genuine high-conviction reversal still needs 5m confirmation.
+        self.assertFalse(self._block(action="BUY", bucket="futuresLosers", confidence="0.96", mtf_5m="bullish"))
 
     def test_disabled_passes_through(self):
         from trade_lessons import trade_lessons_from_config, trade_lesson_block_reasons

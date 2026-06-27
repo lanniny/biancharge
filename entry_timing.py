@@ -47,6 +47,11 @@ class EntryTimingConfig:
     chase_max_momentum: Decimal = Decimal("0.025")
     chase_max_24h_change: Decimal = Decimal("0.20")
     require_1m_alignment_for_chase: bool = True
+    late_chase_min_24h_change: Decimal = Decimal("0.15")
+    require_15m_alignment_for_late_chase: bool = True
+    loser_reversal_min_24h_drop: Decimal = Decimal("0.10")
+    require_5m_bullish_for_loser_long: bool = True
+    loser_short_oversold_rsi: Decimal = Decimal("30")
     defer_on_reversal_candle: bool = True
     strong_continuation_enabled: bool = True
     strong_continuation_min_confidence: Decimal = Decimal("0.95")
@@ -82,6 +87,11 @@ def entry_timing_from_config(raw: dict[str, Any] | None) -> EntryTimingConfig:
         chase_max_momentum=decimal_from(raw.get("chase_max_momentum", "0.025")),
         chase_max_24h_change=decimal_from(raw.get("chase_max_24h_change", "0.20")),
         require_1m_alignment_for_chase=bool(raw.get("require_1m_alignment_for_chase", True)),
+        late_chase_min_24h_change=decimal_from(raw.get("late_chase_min_24h_change", "0.15")),
+        require_15m_alignment_for_late_chase=bool(raw.get("require_15m_alignment_for_late_chase", True)),
+        loser_reversal_min_24h_drop=decimal_from(raw.get("loser_reversal_min_24h_drop", "0.10")),
+        require_5m_bullish_for_loser_long=bool(raw.get("require_5m_bullish_for_loser_long", True)),
+        loser_short_oversold_rsi=decimal_from(raw.get("loser_short_oversold_rsi", "30")),
         defer_on_reversal_candle=bool(raw.get("defer_on_reversal_candle", True)),
         strong_continuation_enabled=bool(raw.get("strong_continuation_enabled", True)),
         strong_continuation_min_confidence=decimal_from(
@@ -160,6 +170,7 @@ def _strong_continuation_allows_chase(
     confidence: Decimal,
     mtf_1m: str,
     mtf_5m: str,
+    mtf_15m: str,
     momentum: Decimal,
     change_24h: Decimal,
     kline_label: str,
@@ -189,6 +200,8 @@ def _strong_continuation_allows_chase(
 
     if action == BUY:
         if mtf_5m != "bullish":
+            return False
+        if cfg.require_15m_alignment_for_late_chase and mtf_15m == "bearish":
             return False
         if mtf_1m == "bearish":
             return False
@@ -226,6 +239,8 @@ def _strong_continuation_allows_chase(
 
     if action == SELL:
         if mtf_5m != "bearish":
+            return False
+        if cfg.require_15m_alignment_for_late_chase and mtf_15m == "bullish":
             return False
         if mtf_1m == "bullish":
             return False
@@ -282,10 +297,14 @@ def entry_timing_defer_reason(
     ind.pop("entry_timing_strong_continuation_score", None)
     mtf_5m = str(ind.get("mtf_5m", "") or "")
     mtf_1m = str(ind.get("mtf_1m", "") or "")
+    mtf_15m = str(ind.get("mtf_15m", "") or "")
     momentum = decimal_from(ind.get("momentum", "0") or "0")
     change_24h = _normalized_change_24h(ind.get("price_change_pct_24h", "0") or "0")
     kline_label = str(ind.get("kline_pattern_label", "") or "")
     signal_confidence = decimal_from(confidence or "0")
+    rsi = decimal_from(ind.get("rsi", "0") or "0")
+    bucket_name = str(ind.get("discovery_bucket") or ind.get("discovery_source") or "")
+    loser_bucket = "Losers" in bucket_name or bucket_name == "futuresLosers" or bucket_name.endswith(":futuresLosers")
 
     if cfg.movement_aware_enabled:
         strong_continuation_ok = _strong_continuation_allows_chase(
@@ -295,6 +314,7 @@ def entry_timing_defer_reason(
             confidence=signal_confidence,
             mtf_1m=mtf_1m,
             mtf_5m=mtf_5m,
+            mtf_15m=mtf_15m,
             momentum=momentum,
             change_24h=change_24h,
             kline_label=kline_label,
@@ -307,6 +327,27 @@ def entry_timing_defer_reason(
             )
             return None
         if action == BUY:
+            if (
+                loser_bucket
+                and cfg.require_5m_bullish_for_loser_long
+                and cfg.loser_reversal_min_24h_drop > 0
+                and change_24h <= -cfg.loser_reversal_min_24h_drop
+                and (mtf_5m != "bullish" or momentum < 0)
+            ):
+                return (
+                    f"Entry timing: losers-bucket long deferred — 24h move {change_24h:.2%}, "
+                    f"momentum {momentum:.2%}, 5m={mtf_5m or 'neutral'}; wait for 5m bullish reversal."
+                )
+            if (
+                cfg.require_15m_alignment_for_late_chase
+                and cfg.late_chase_min_24h_change > 0
+                and change_24h >= cfg.late_chase_min_24h_change
+                and mtf_15m == "bearish"
+            ):
+                return (
+                    f"Entry timing: long direction kept, but 24h move {change_24h:.2%} "
+                    "has 15m bearish conflict; wait for higher-timeframe confirmation."
+                )
             if cfg.require_1m_alignment_for_chase and mtf_1m == "bearish" and mtf_5m == "bullish":
                 return "Entry timing: long direction kept, but 1m turned bearish against 5m; wait for pullback stabilization."
             if (
@@ -332,6 +373,18 @@ def entry_timing_defer_reason(
             if cfg.defer_on_reversal_candle and kline_label == "bearish":
                 return "Entry timing: long direction kept, but bearish reversal candle appeared; wait for confirmation."
         elif action == SELL:
+            if (
+                loser_bucket
+                and cfg.loser_reversal_min_24h_drop > 0
+                and change_24h <= -cfg.loser_reversal_min_24h_drop
+                and cfg.loser_short_oversold_rsi > 0
+                and rsi > 0
+                and rsi <= cfg.loser_short_oversold_rsi
+            ):
+                return (
+                    f"Entry timing: losers-bucket short deferred — 24h drop {change_24h:.2%} "
+                    f"with RSI {rsi:.1f}; wait for bounce failure."
+                )
             if cfg.require_1m_alignment_for_chase and mtf_1m == "bullish" and mtf_5m == "bearish":
                 return "Entry timing: short direction kept, but 1m bounced against 5m; wait for bounce failure."
             if (

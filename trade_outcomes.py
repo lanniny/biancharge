@@ -63,6 +63,11 @@ class TradeLearningConfig:
     high_capture_exit_mult: Decimal = Decimal("1.10")
     min_exit_quality_mult: Decimal = Decimal("0.75")
     max_exit_quality_mult: Decimal = Decimal("1.15")
+    fast_bucket_shadow_enabled: bool = True
+    fast_bucket_min_sample: int = 2
+    fast_bucket_total_loss: Decimal = Decimal("-1.0")
+    fast_bucket_max_profit_factor: Decimal = Decimal("0.25")
+    fast_bucket_max_win_rate: Decimal = Decimal("0.10")
 
 
 def trade_learning_from_config(raw: dict[str, Any] | None) -> TradeLearningConfig:
@@ -111,6 +116,11 @@ def trade_learning_from_config(raw: dict[str, Any] | None) -> TradeLearningConfi
         high_capture_exit_mult=decimal_from(raw.get("high_capture_exit_mult", "1.10")),
         min_exit_quality_mult=decimal_from(raw.get("min_exit_quality_mult", "0.75")),
         max_exit_quality_mult=decimal_from(raw.get("max_exit_quality_mult", "1.15")),
+        fast_bucket_shadow_enabled=bool(raw.get("fast_bucket_shadow_enabled", True)),
+        fast_bucket_min_sample=int(raw.get("fast_bucket_min_sample", 2)),
+        fast_bucket_total_loss=decimal_from(raw.get("fast_bucket_total_loss", "-1.0")),
+        fast_bucket_max_profit_factor=decimal_from(raw.get("fast_bucket_max_profit_factor", "0.25")),
+        fast_bucket_max_win_rate=decimal_from(raw.get("fast_bucket_max_win_rate", "0.10")),
     )
 
 
@@ -188,6 +198,22 @@ def maybe_graduate_from_shadow(
     if live_stat:
         live_sample = int(live_stat.get("sampleSize", 0))
         live_win_rate = decimal_from(live_stat.get("winRate", "0"))
+        live_total_pnl = decimal_from(live_stat.get("totalPnl", "0"))
+        live_profit_factor = decimal_from(live_stat.get("profitFactor", "0"))
+        if (
+            cfg.fast_bucket_shadow_enabled
+            and live_sample >= cfg.fast_bucket_min_sample
+            and live_total_pnl <= cfg.fast_bucket_total_loss
+            and live_win_rate <= cfg.fast_bucket_max_win_rate
+            and live_profit_factor <= cfg.fast_bucket_max_profit_factor
+        ):
+            return (
+                mode,
+                (
+                    f"live lock: fast loss quarantine, pnl {live_total_pnl}, PF {live_profit_factor:.2f}, "
+                    f"{live_win_rate:.0%} over {live_sample} live closes"
+                ),
+            )
         if (
             live_sample >= cfg.min_bucket_sample
             and live_win_rate < cfg.min_win_rate_block
@@ -366,7 +392,7 @@ def resolve_exit_quality_factor(quality: dict[str, Any], cfg: TradeLearningConfi
         return Decimal("1")
     capture = decimal_from(quality.get("avgCaptureRatio", "0"))
     avg_mfe = decimal_from(quality.get("avgMfePct", "0"))
-    if capture > 0 and capture < cfg.low_capture_ratio:
+    if avg_mfe > 0 and capture < cfg.low_capture_ratio:
         factor = cfg.low_capture_exit_mult
     elif capture >= cfg.high_capture_ratio and avg_mfe >= cfg.high_mfe_pct:
         factor = cfg.high_capture_exit_mult
@@ -386,10 +412,18 @@ def resolve_discovery_live_mode(
     total_pnl: Decimal | None = None,
 ) -> str:
     threshold_sample = min_sample if min_sample is not None else cfg.min_sample_for_win_rate_block
-    if sample < threshold_sample:
-        return "live"
     pf = profit_factor if profit_factor is not None else Decimal("0")
     pnl = total_pnl if total_pnl is not None else Decimal("0")
+    if (
+        cfg.fast_bucket_shadow_enabled
+        and sample >= cfg.fast_bucket_min_sample
+        and pnl <= cfg.fast_bucket_total_loss
+        and win_rate <= cfg.fast_bucket_max_win_rate
+        and pf <= cfg.fast_bucket_max_profit_factor
+    ):
+        return "shadow_first"
+    if sample < threshold_sample:
+        return "live"
     if pnl > 0 and pf >= Decimal("1.20"):
         return "live"
     if win_rate < cfg.min_win_rate_block:

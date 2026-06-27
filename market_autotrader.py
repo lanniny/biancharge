@@ -2941,6 +2941,9 @@ def apply_risk_controls(
             bucket=bucket,
             fusion_bull_pct=decimal_from(indicators.get("fusion_bull_pct", "0") or "0"),
             entry_quadrant=str(indicators.get("entry_quadrant", "") or ""),
+            mtf_1m=str(indicators.get("mtf_1m", "") or ""),
+            mtf_5m=str(indicators.get("mtf_5m", "") or ""),
+            mtf_15m=str(indicators.get("mtf_15m", "") or ""),
             lesson_stats=(trade_lessons or {}).get("ruleStats") if trade_lessons else None,
         )
         if skip_gainers_short_lessons(indicators):
@@ -5488,9 +5491,9 @@ def _run_once_monolithic(config: dict[str, Any], memory: TradingMemory | None = 
     if ctx_cfg.enabled:
         save_market_context_snapshot(ctx_cfg.snapshot_path, market_ctx)
     trade_learning = compute_trade_learning_snapshot(learning_cfg)
-    trade_lessons = load_lessons_document(lessons_cfg.lessons_path)
+    trade_lessons = refresh_trade_lessons(lessons_cfg, learning_cfg.outcomes_path)
     if not trade_lessons.get("losses") and not trade_lessons.get("wins"):
-        trade_lessons = refresh_trade_lessons(lessons_cfg, learning_cfg.outcomes_path)
+        trade_lessons = load_lessons_document(lessons_cfg.lessons_path)
 
     from supervisor_hints import supervisor_hints_from_config
 

@@ -860,3 +860,75 @@ class TradeOutcomeUnittestCoverage(unittest.TestCase):
             cfg,
         )
         self.assertEqual(factor, Decimal("1"))
+
+    def test_negative_capture_tightens_exit_quality_factor(self) -> None:
+        cfg = trade_learning_from_config(
+            {
+                "enabled": True,
+                "min_exit_quality_sample": 1,
+                "low_capture_exit_mult": "0.80",
+            }
+        )
+        factor = resolve_exit_quality_factor(
+            {"sampleSize": 1, "avgCaptureRatio": "-2.37", "avgMfePct": "0.0118"},
+            cfg,
+        )
+        self.assertEqual(factor, Decimal("0.80"))
+
+    def test_fast_bucket_shadow_first_after_two_large_losses(self) -> None:
+        cfg = trade_learning_from_config(
+            {
+                "enabled": True,
+                "min_bucket_sample": 6,
+                "fast_bucket_shadow_enabled": True,
+                "fast_bucket_min_sample": 2,
+                "fast_bucket_total_loss": "-1.0",
+                "fast_bucket_max_profit_factor": "0.25",
+                "fast_bucket_max_win_rate": "0.10",
+            }
+        )
+        mode = resolve_discovery_live_mode(
+            win_rate=Decimal("0"),
+            sample=2,
+            cfg=cfg,
+            previous_mode="live",
+            min_sample=cfg.min_bucket_sample,
+            profit_factor=Decimal("0"),
+            total_pnl=Decimal("-2.7"),
+        )
+        self.assertEqual(mode, "shadow_first")
+
+    def test_fast_bucket_shadow_first_applies_to_snapshot(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            outcomes = tmp_path / "outcomes.jsonl"
+            cfg = trade_learning_from_config(
+                {
+                    "enabled": True,
+                    "outcomes_path": str(outcomes),
+                    "state_path": str(tmp_path / "state.json"),
+                    "lookback_trades": 20,
+                    "min_bucket_sample": 6,
+                    "fast_bucket_shadow_enabled": True,
+                    "fast_bucket_min_sample": 2,
+                    "fast_bucket_total_loss": "-1.0",
+                }
+            )
+            for symbol, exit_price in (("AAVEUSDT", "98"), ("MUUSDT", "99")):
+                record_trade_outcome(
+                    cfg,
+                    symbol=symbol,
+                    side="SELL",
+                    quantity=Decimal("1"),
+                    exit_price=Decimal(exit_price),
+                    entry_price=Decimal("100"),
+                    position_side="LONG",
+                    regime="trend_up",
+                    session=None,
+                    rationale_summary=None,
+                    open_context={"bucket": "futuresGainers", "source": "discovery:futuresGainers"},
+                )
+
+            snapshot = compute_trade_learning_snapshot(cfg)
+            self.assertEqual(snapshot["bucketStats"]["futuresGainers"]["sampleSize"], 2)
+            self.assertEqual(snapshot["bucketLiveModes"]["futuresGainers"], "shadow_first")

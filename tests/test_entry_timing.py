@@ -183,6 +183,101 @@ def test_high_confidence_continuation_still_blocks_overheated_rsi():
     assert "momentum" in reason
 
 
+def test_aave_like_late_gainer_waits_for_15m_confirmation():
+    cfg = entry_timing_from_config(
+        {
+            "enabled": True,
+            "mode": "chase_fill",
+            "movement_aware_enabled": True,
+            "late_chase_min_24h_change": "0.15",
+            "require_15m_alignment_for_late_chase": True,
+        }
+    )
+    indicators = _indicators(
+        discovery_bucket="futuresGainers",
+        mtf_1m="neutral",
+        mtf_5m="bullish",
+        mtf_15m="bearish",
+        momentum="0.01572",
+        price_change_pct_24h="0.17504",
+        rsi="70.26",
+        volume_ratio="1.2",
+        fusion_bull_pct="0.7292",
+    )
+    reason = entry_timing_defer_reason(
+        action="BUY",
+        indicators=indicators,
+        cfg=cfg,
+        reduce_only=False,
+        confidence=Decimal("0.95"),
+    )
+    assert reason is not None
+    assert "15m bearish conflict" in reason
+
+
+def test_ousdt_like_loser_long_waits_for_5m_reversal():
+    cfg = entry_timing_from_config(
+        {
+            "enabled": True,
+            "mode": "chase_fill",
+            "movement_aware_enabled": True,
+            "loser_reversal_min_24h_drop": "0.10",
+            "require_5m_bullish_for_loser_long": True,
+        }
+    )
+    indicators = _indicators(
+        discovery_bucket="futuresLosers",
+        mtf_1m="bullish",
+        mtf_5m="neutral",
+        mtf_15m="bullish",
+        momentum="-0.00863",
+        price_change_pct_24h="-0.18596",
+        rsi="56.1",
+    )
+    reason = entry_timing_defer_reason(
+        action="BUY",
+        indicators=indicators,
+        cfg=cfg,
+        reduce_only=False,
+        confidence=Decimal("0.99"),
+    )
+    assert reason is not None
+    assert "losers-bucket long deferred" in reason
+    assert "5m=neutral" in reason
+
+
+def test_rif_like_loser_short_waits_after_oversold_drop():
+    cfg = entry_timing_from_config(
+        {
+            "enabled": True,
+            "mode": "chase_fill",
+            "movement_aware_enabled": True,
+            "loser_reversal_min_24h_drop": "0.10",
+            "loser_short_oversold_rsi": "30",
+        }
+    )
+    indicators = {
+        "entry_quadrant": "trend_short",
+        "discovery_bucket": "futuresLosers",
+        "mtf_1m": "bearish",
+        "mtf_5m": "bearish",
+        "mtf_15m": "bearish",
+        "momentum": "-0.0127",
+        "price_change_pct_24h": "-0.1462",
+        "rsi": "27.94",
+        "atr_pct": "0.02",
+    }
+    reason = entry_timing_defer_reason(
+        action="SELL",
+        indicators=indicators,
+        cfg=cfg,
+        reduce_only=False,
+        confidence=Decimal("1"),
+    )
+    assert reason is not None
+    assert "losers-bucket short deferred" in reason
+
+
 def test_high_confidence_continuation_can_accept_neutral_1m_with_quality_score():
     cfg = entry_timing_from_config(
         {

@@ -432,9 +432,9 @@ class MarketPoller:
         if ctx_cfg.enabled:
             save_market_context_snapshot(ctx_cfg.snapshot_path, market_ctx)
         trade_learning = compute_trade_learning_snapshot(learning_cfg)
-        trade_lessons = load_lessons_document(lessons_cfg.lessons_path)
+        trade_lessons = refresh_trade_lessons(lessons_cfg, learning_cfg.outcomes_path)
         if not trade_lessons.get("losses") and not trade_lessons.get("wins"):
-            trade_lessons = refresh_trade_lessons(lessons_cfg, learning_cfg.outcomes_path)
+            trade_lessons = load_lessons_document(lessons_cfg.lessons_path)
 
         snapshots: list[dict[str, Any]] = []
         for asset in assets:
