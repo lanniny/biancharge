@@ -29,6 +29,7 @@ BINANCE_ORDER_TEST = "binance_order_test"
 FUTURES = "futures"
 SPOT = "spot"
 BINANCE_FUTURES_BASE = "https://fapi.binance.com"
+DOTENV_PATH = ".env"
 
 ORDER_MARKET = "MARKET"
 ORDER_LIMIT = "LIMIT"
@@ -50,6 +51,36 @@ CASH_USDT_FUTURES = "USDT_FUTURES"
 
 def decimal_from(value: Any) -> Decimal:
     return Decimal(str(value))
+
+
+def read_dotenv_value(name: str, *, path: str | None = None) -> str:
+    path = path or DOTENV_PATH
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            lines = file.readlines()
+    except OSError:
+        return ""
+    prefix = f"{name}="
+    export_prefix = f"export {name}="
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith(export_prefix):
+            value = line[len(export_prefix) :]
+        elif line.startswith(prefix):
+            value = line[len(prefix) :]
+        else:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        return value
+    return ""
+
+
+def env_value(name: str) -> str:
+    return os.environ.get(name, "").strip() or read_dotenv_value(name).strip()
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -1096,6 +1127,8 @@ class TradingMemory:
             # f"{symbol}:{utc_today_key()}" with a normalized symbol.
             add_key = f"{normalize_symbol(symbol)}:{today}"
             self.daily_symbol_add_counts[add_key] = self.daily_symbol_add_counts.get(add_key, 0) + 1
+        elif is_open:
+            self.position_opened_at[normalize_symbol(symbol)] = timestamp
 
     def record_loss(self, amount: Decimal) -> None:
         if amount <= 0:
@@ -1553,6 +1586,26 @@ def open_context_with_excursion(
     return ctx
 
 
+def ensure_position_open_time(memory: TradingMemory, symbol: str, observed_at: int) -> None:
+    sym = normalize_symbol(symbol)
+    if memory.position_opened_at.get(sym):
+        return
+    ctx = memory.position_open_context.get(sym) or {}
+    candidates = [
+        ctx.get("capturedAt"),
+        memory.last_trade_at.get(sym),
+        observed_at,
+    ]
+    for candidate in candidates:
+        try:
+            opened_at = int(candidate)
+        except (TypeError, ValueError):
+            continue
+        if opened_at > 0:
+            memory.position_opened_at[sym] = opened_at
+            return
+
+
 def detect_external_position_closures(
     memory: TradingMemory,
     portfolio: PaperPortfolio,
@@ -1646,6 +1699,7 @@ def refresh_last_open_positions_snapshot(
                     mark = (mark_prices or {}).get(sym) or entry
                 if entry > 0 and mark > 0:
                     update_position_excursion(memory, sym, entry=entry, mark=mark, side_long=amt > 0)
+                ensure_position_open_time(memory, sym, observed_at)
                 current[sym] = {
                     "quantity": str(abs(amt)),
                     "entryPrice": str(entry),
@@ -1676,6 +1730,7 @@ def refresh_last_open_positions_snapshot(
                 mark=mark,
                 side_long=pos.quantity > 0,
             )
+        ensure_position_open_time(memory, sym, observed_at)
         current[sym] = {
             "quantity": str(abs(pos.quantity)),
             "entryPrice": str(pos.average_price),
@@ -3304,8 +3359,8 @@ def live_trading_arm_status(path: str) -> dict[str, Any]:
 
 
 def resolve_api_credentials(execution: ExecutionConfig) -> tuple[str, str]:
-    api_key = execution.api_key or os.environ.get("BINANCE_API_KEY", "")
-    api_secret = execution.api_secret or os.environ.get("BINANCE_API_SECRET", "")
+    api_key = execution.api_key or env_value("BINANCE_API_KEY")
+    api_secret = execution.api_secret or env_value("BINANCE_API_SECRET")
     return api_key, api_secret
 
 
@@ -5152,9 +5207,7 @@ def execute_decision(
 
 def expand_env(value: Any) -> Any:
     if isinstance(value, str) and value.startswith("env:"):
-        import os
-
-        return os.environ.get(value[4:], "")
+        return env_value(value[4:])
     if isinstance(value, dict):
         return {key: expand_env(item) for key, item in value.items()}
     if isinstance(value, list):

@@ -37,6 +37,7 @@ from market_autotrader import (
     build_futures_order_intent,
     effective_breakeven_activate_pct,
     ensure_futures_position_protection,
+    ensure_position_open_time,
     maybe_trail_futures_take_profit,
     open_context_with_excursion,
     protection_breakeven_activate_multiplier,
@@ -53,6 +54,7 @@ class RecordTradeSignatureTests(unittest.TestCase):
         memory.record_trade("BTCUSDT", 1_700_000_000, is_open=True, is_add=False)
         self.assertEqual(memory.count_for_today(), 1)
         self.assertEqual(memory.last_trade_at["BTCUSDT"], 1_700_000_000)
+        self.assertEqual(memory.position_opened_at["BTCUSDT"], 1_700_000_000)
 
     def test_is_add_increments_per_symbol_add_cap_with_matching_key(self):
         # F1: the add cap read side uses f"{symbol}:{utc_today_key()}".
@@ -65,6 +67,12 @@ class RecordTradeSignatureTests(unittest.TestCase):
         memory = TradingMemory()
         memory.record_trade("ETHUSDT", 1_700_000_000, is_open=True, is_add=False)
         self.assertEqual(memory.daily_symbol_add_counts, {})
+
+    def test_add_does_not_reset_original_open_time(self):
+        memory = TradingMemory()
+        memory.record_trade("ETHUSDT", 1_700_000_000, is_open=True, is_add=False)
+        memory.record_trade("ETHUSDT", 1_700_000_500, is_open=True, is_add=True)
+        self.assertEqual(memory.position_opened_at["ETHUSDT"], 1_700_000_000)
 
 
 class DayKeyTimezoneTests(unittest.TestCase):
@@ -79,6 +87,24 @@ class DayKeyTimezoneTests(unittest.TestCase):
         memory = TradingMemory()
         memory.record_loss(Decimal("12.5"))
         self.assertEqual(memory.daily_loss_today(), Decimal("12.5"))
+
+
+class PositionOpenTimeTests(unittest.TestCase):
+    def test_missing_open_time_backfills_from_open_context(self):
+        memory = TradingMemory()
+        memory.position_open_context["BTCUSDT"] = {"capturedAt": 1_700_000_123}
+
+        ensure_position_open_time(memory, "BTCUSDT", 1_700_000_999)
+
+        self.assertEqual(memory.position_opened_at["BTCUSDT"], 1_700_000_123)
+
+    def test_missing_open_time_falls_back_to_last_trade(self):
+        memory = TradingMemory()
+        memory.last_trade_at["ETHUSDT"] = 1_700_000_500
+
+        ensure_position_open_time(memory, "ETHUSDT", 1_700_000_999)
+
+        self.assertEqual(memory.position_opened_at["ETHUSDT"], 1_700_000_500)
 
 
 class RealizedPnlDailyLossTests(unittest.TestCase):
