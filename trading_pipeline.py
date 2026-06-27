@@ -315,10 +315,13 @@ def should_override_discovery_gate(
         return False
     bucket = str(watch_entry.get("bucket") or "")
     learning = trade_learning or {}
-    if bucket and bucket in set(learning.get("shadowFirstBuckets") or []):
+    canary_buckets = set(learning.get("shadowCanaryBuckets") or [])
+    canary_factor = decimal_from((learning.get("bucketCanaryFactors") or {}).get(bucket, "0")) if bucket else Decimal("0")
+    valid_canary = bucket in canary_buckets and Decimal("0") < canary_factor < Decimal("1")
+    if bucket and bucket in set(learning.get("shadowFirstBuckets") or []) and not valid_canary:
         return False
     bucket_modes = learning.get("bucketLiveModes") if isinstance(learning.get("bucketLiveModes"), dict) else {}
-    if bucket and bucket_modes.get(bucket) == "shadow_first":
+    if bucket and bucket_modes.get(bucket) == "shadow_first" and not valid_canary:
         return False
     return True
 

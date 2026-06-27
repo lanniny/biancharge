@@ -562,6 +562,66 @@ class MarketAutotraderTests(unittest.TestCase):
         self.assertEqual(decision.order.quote_amount, Decimal("90.00000000"))
         self.assertNotIn("exceeds max trade quote", " ".join(decision.blocked_reasons))
 
+    def test_shadow_canary_bucket_scales_and_allows_probe(self) -> None:
+        asset = AssetConfig(
+            symbol="BTCUSDT",
+            market="binance_futures",
+            base_asset="BTC",
+            quote_asset="USDT",
+            provider={},
+        )
+        snapshot = MarketSnapshot(asset=asset, bars=reasonable_buy_bars(), observed_at=1000)
+        signal = ma.Signal(
+            action=BUY,
+            confidence=Decimal("0.95"),
+            reasons=["strong"],
+            warnings=[],
+            indicators={
+                "atr_pct": "0.01",
+                "discovery_bucket": "futuresLosers",
+                "discovery_source": "discovery:futuresLosers",
+                "mtf_5m": "bullish",
+            },
+        )
+        portfolio = PaperPortfolio(
+            cash={"USDT_FUTURES": Decimal("200")},
+            wallet_balance=Decimal("200"),
+        )
+
+        decision = apply_risk_controls(
+            snapshot,
+            signal,
+            StrategyConfig(confidence_scale_sizing=False, buy_quote_fraction=Decimal("0.40")),
+            RiskConfig(
+                mode="paper",
+                max_trade_quote=Decimal("100"),
+                max_position_quote=Decimal("500"),
+                min_trade_quote=Decimal("10"),
+                reserve_futures_available_usdt=Decimal("0"),
+                max_daily_trades=0,
+                require_reason_count=1,
+            ),
+            portfolio,
+            TradingMemory(),
+            auto_exec=ma.AutoExecutionConfig(default_leverage=5, max_leverage=5),
+            trade_learning={
+                "enabled": True,
+                "bucketLiveModes": {"futuresLosers": "shadow_first"},
+                "shadowFirstBuckets": ["futuresLosers"],
+                "shadowCanaryBuckets": ["futuresLosers"],
+                "bucketCanaryFactors": {"futuresLosers": "0.25"},
+                "bucketCanaryNotes": {"futuresLosers": "shadow canary: edge recovered"},
+            },
+            trade_learning_cfg=__import__("trade_outcomes").trade_learning_from_config({"enabled": True}),
+            trade_lessons_cfg=__import__("trade_lessons").trade_lessons_from_config({"enabled": False}),
+        )
+
+        self.assertTrue(decision.approved, decision.blocked_reasons)
+        self.assertIsNotNone(decision.order)
+        self.assertEqual(decision.order.quote_amount, Decimal("25.00"))
+        self.assertEqual(signal.indicators.get("trade_learning_shadow_canary"), "true")
+        self.assertFalse(any("shadow paper" in reason for reason in decision.reasons))
+
     def test_risk_resizes_quote_to_remaining_portfolio_heat_room(self) -> None:
         asset = AssetConfig(
             symbol="BTCUSDT",

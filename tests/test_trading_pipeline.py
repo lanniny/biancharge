@@ -261,6 +261,41 @@ class TradingPipelineTests(unittest.TestCase):
             )
         )
 
+    def test_discovery_override_allows_shadow_canary_bucket(self) -> None:
+        signal = Signal("BUY", Decimal("0.99"), ["strong"], [], {})
+        order = OrderIntent("BUY", "TESTUSDT", "binance_futures", "USDT", Decimal("50"), Decimal("1"))
+        approved = RiskDecision(True, "BUY", ["strong"], [], order)
+        self.assertTrue(
+            should_override_discovery_gate(
+                decision=approved,
+                signal=signal,
+                watch_entry={"source": "discovery:futuresLosers", "bucket": "futuresLosers"},
+                trade_learning={
+                    "shadowFirstBuckets": ["futuresLosers"],
+                    "shadowCanaryBuckets": ["futuresLosers"],
+                    "bucketLiveModes": {"futuresLosers": "shadow_first"},
+                    "bucketCanaryFactors": {"futuresLosers": "0.25"},
+                },
+            )
+        )
+
+    def test_discovery_override_requires_valid_canary_factor(self) -> None:
+        signal = Signal("BUY", Decimal("0.99"), ["strong"], [], {})
+        order = OrderIntent("BUY", "TESTUSDT", "binance_futures", "USDT", Decimal("50"), Decimal("1"))
+        approved = RiskDecision(True, "BUY", ["strong"], [], order)
+        self.assertFalse(
+            should_override_discovery_gate(
+                decision=approved,
+                signal=signal,
+                watch_entry={"source": "discovery:futuresLosers", "bucket": "futuresLosers"},
+                trade_learning={
+                    "shadowFirstBuckets": ["futuresLosers"],
+                    "shadowCanaryBuckets": ["futuresLosers"],
+                    "bucketLiveModes": {"futuresLosers": "shadow_first"},
+                },
+            )
+        )
+
     def test_live_execution_preflight_rechecks_heat_after_prior_fill(self) -> None:
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

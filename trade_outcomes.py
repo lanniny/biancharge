@@ -72,6 +72,13 @@ class TradeLearningConfig:
     fast_bucket_total_loss: Decimal = Decimal("-1.0")
     fast_bucket_max_profit_factor: Decimal = Decimal("0.25")
     fast_bucket_max_win_rate: Decimal = Decimal("0.10")
+    shadow_canary_enabled: bool = True
+    shadow_canary_min_sample: int = 30
+    shadow_canary_min_win_rate: Decimal = Decimal("0.45")
+    shadow_canary_min_profit_factor: Decimal = Decimal("1.05")
+    shadow_canary_min_total_pnl: Decimal = Decimal("1.0")
+    shadow_canary_max_live_sample: int = 3
+    shadow_canary_factor: Decimal = Decimal("0.25")
 
 
 def trade_learning_from_config(raw: dict[str, Any] | None) -> TradeLearningConfig:
@@ -129,6 +136,13 @@ def trade_learning_from_config(raw: dict[str, Any] | None) -> TradeLearningConfi
         fast_bucket_total_loss=decimal_from(raw.get("fast_bucket_total_loss", "-1.0")),
         fast_bucket_max_profit_factor=decimal_from(raw.get("fast_bucket_max_profit_factor", "0.25")),
         fast_bucket_max_win_rate=decimal_from(raw.get("fast_bucket_max_win_rate", "0.10")),
+        shadow_canary_enabled=bool(raw.get("shadow_canary_enabled", True)),
+        shadow_canary_min_sample=int(raw.get("shadow_canary_min_sample", 30)),
+        shadow_canary_min_win_rate=decimal_from(raw.get("shadow_canary_min_win_rate", "0.45")),
+        shadow_canary_min_profit_factor=decimal_from(raw.get("shadow_canary_min_profit_factor", "1.05")),
+        shadow_canary_min_total_pnl=decimal_from(raw.get("shadow_canary_min_total_pnl", "1.0")),
+        shadow_canary_max_live_sample=int(raw.get("shadow_canary_max_live_sample", 3)),
+        shadow_canary_factor=decimal_from(raw.get("shadow_canary_factor", "0.25")),
     )
 
 
@@ -253,6 +267,40 @@ def maybe_graduate_from_shadow(
             f"shadow graduated ({win_rate:.0%} over {sample} shadow closes)",
         )
     return mode, None
+
+
+def maybe_shadow_canary(
+    *,
+    bucket: str,
+    mode: str,
+    shadow_stat: dict[str, Any] | None,
+    cfg: TradeLearningConfig,
+    live_stat: dict[str, Any] | None = None,
+) -> tuple[Decimal, str | None]:
+    if not cfg.shadow_canary_enabled or mode != "shadow_first" or not shadow_stat:
+        return Decimal("0"), None
+    live_sample = int((live_stat or {}).get("sampleSize", 0))
+    if live_sample > cfg.shadow_canary_max_live_sample:
+        return Decimal("0"), None
+    sample = int(shadow_stat.get("sampleSize", 0))
+    win_rate = decimal_from(shadow_stat.get("winRate", "0"))
+    total_pnl = decimal_from(shadow_stat.get("totalPnl", "0"))
+    profit_factor = decimal_from(shadow_stat.get("profitFactor", "0"))
+    if (
+        sample >= cfg.shadow_canary_min_sample
+        and win_rate >= cfg.shadow_canary_min_win_rate
+        and profit_factor >= cfg.shadow_canary_min_profit_factor
+        and total_pnl >= cfg.shadow_canary_min_total_pnl
+    ):
+        factor = min(max(cfg.shadow_canary_factor, Decimal("0.05")), Decimal("0.50"))
+        return (
+            factor,
+            (
+                f"shadow canary: bucket {bucket} shadow WR {win_rate:.0%}, PF {profit_factor:.2f}, "
+                f"pnl {total_pnl} over {sample} closes; live sample {live_sample}"
+            ),
+        )
+    return Decimal("0"), None
 
 
 def outcome_bucket(row: dict[str, Any]) -> str:
@@ -524,6 +572,8 @@ def compute_trade_learning_snapshot(cfg: TradeLearningConfig) -> dict[str, Any]:
     bucket_graduations: dict[str, str] = {}
     bucket_sizing_factors: dict[str, str] = {}
     bucket_exit_quality_factors: dict[str, str] = {}
+    bucket_canary_factors: dict[str, str] = {}
+    bucket_canary_notes: dict[str, str] = {}
 
     if cfg.bucket_win_rate_enabled:
         bucket_names = sorted(set(bucket_stats) | set(shadow_bucket_stats))
@@ -551,6 +601,17 @@ def compute_trade_learning_snapshot(cfg: TradeLearningConfig) -> dict[str, Any]:
             bucket_live_modes[bucket] = graduated_mode
             if graduation_note:
                 bucket_graduations[bucket] = graduation_note
+            canary_factor, canary_note = maybe_shadow_canary(
+                bucket=bucket,
+                mode=graduated_mode,
+                shadow_stat=shadow_bucket_stats.get(bucket),
+                cfg=cfg,
+                live_stat=stat or None,
+            )
+            if canary_factor > 0:
+                bucket_canary_factors[bucket] = str(canary_factor.quantize(Decimal("0.01")))
+                if canary_note:
+                    bucket_canary_notes[bucket] = canary_note
             if stat:
                 bucket_sizing_factor = resolve_bucket_sizing_factor(stat, cfg)
                 if bucket_sizing_factor != Decimal("1"):
@@ -604,6 +665,7 @@ def compute_trade_learning_snapshot(cfg: TradeLearningConfig) -> dict[str, Any]:
     shadow_first_buckets = sorted(
         bucket for bucket, mode in bucket_live_modes.items() if mode == "shadow_first"
     )
+    shadow_canary_buckets = sorted(bucket_canary_factors)
 
     snapshot = {
         "enabled": True,
@@ -626,9 +688,12 @@ def compute_trade_learning_snapshot(cfg: TradeLearningConfig) -> dict[str, Any]:
         "bucketStats": bucket_stats,
         "bucketSizingFactors": bucket_sizing_factors,
         "bucketExitQualityFactors": bucket_exit_quality_factors,
+        "bucketCanaryFactors": bucket_canary_factors,
+        "bucketCanaryNotes": bucket_canary_notes,
         "discoveryLiveMode": discovery_live_mode,
         "bucketLiveModes": bucket_live_modes,
         "shadowFirstBuckets": shadow_first_buckets,
+        "shadowCanaryBuckets": shadow_canary_buckets,
         "winRateShadowFirst": cfg.win_rate_shadow_first,
         "shadowBucketStats": shadow_bucket_stats,
         "shadowSummary": {
@@ -753,6 +818,10 @@ def trade_learning_discovery_shadow_first(
         grad_note = graduations.get(bucket_key)
         if grad_note and str(grad_note).startswith("shadow graduated"):
             return False, None
+        canary_note = (snapshot.get("bucketCanaryNotes") or {}).get(bucket_key)
+        canary_factor = decimal_from((snapshot.get("bucketCanaryFactors") or {}).get(bucket_key, "0"))
+        if canary_note and Decimal("0") < canary_factor < Decimal("1"):
+            return False, str(canary_note)
         return (
             True,
             (
@@ -826,6 +895,27 @@ def apply_bucket_sizing_factor(
     return scaled, factor
 
 
+def apply_shadow_canary_factor(
+    quote_amount: Decimal,
+    snapshot: dict[str, Any],
+    *,
+    bucket: str,
+    source: str = "",
+) -> tuple[Decimal, Decimal]:
+    if not snapshot.get("enabled"):
+        return quote_amount, Decimal("1")
+    bucket_key = str(bucket or "").strip()
+    if not bucket_key and str(source or "").startswith("discovery:"):
+        bucket_key = str(source).split(":", 1)[1]
+    if not bucket_key:
+        return quote_amount, Decimal("1")
+    factor = decimal_from((snapshot.get("bucketCanaryFactors") or {}).get(bucket_key, "1"))
+    if factor <= 0 or factor >= Decimal("1"):
+        return quote_amount, Decimal("1")
+    scaled = (quote_amount * factor).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    return scaled, factor
+
+
 def required_confidence_with_learning(base: Decimal, snapshot: dict[str, Any]) -> Decimal:
     if not snapshot.get("enabled"):
         return base
@@ -849,9 +939,12 @@ def trade_learning_rationale_block(snapshot: dict[str, Any]) -> dict[str, Any]:
         "bucketStats": snapshot.get("bucketStats"),
         "bucketSizingFactors": snapshot.get("bucketSizingFactors"),
         "bucketExitQualityFactors": snapshot.get("bucketExitQualityFactors"),
+        "bucketCanaryFactors": snapshot.get("bucketCanaryFactors"),
+        "bucketCanaryNotes": snapshot.get("bucketCanaryNotes"),
         "discoveryLiveMode": snapshot.get("discoveryLiveMode"),
         "bucketLiveModes": snapshot.get("bucketLiveModes"),
         "shadowFirstBuckets": snapshot.get("shadowFirstBuckets"),
+        "shadowCanaryBuckets": snapshot.get("shadowCanaryBuckets"),
         "shadowBucketStats": snapshot.get("shadowBucketStats"),
         "shadowSummary": snapshot.get("shadowSummary"),
         "bucketGraduations": snapshot.get("bucketGraduations"),

@@ -2464,6 +2464,7 @@ def apply_risk_controls(
     )
     from trade_outcomes import (
         apply_bucket_sizing_factor,
+        apply_shadow_canary_factor,
         apply_sizing_factor,
         required_confidence_with_learning,
         trade_learning_block_reason,
@@ -2642,6 +2643,20 @@ def apply_risk_controls(
                 f"Trade learning bucket sizing factor applied: quote {order.quote_amount} USDT "
                 f"(x{bucket_factor})."
             )
+        canary_scaled_quote, canary_factor = apply_shadow_canary_factor(
+            order.quote_amount,
+            trade_learning,
+            bucket=str(indicators.get("discovery_bucket") or ""),
+            source=str(indicators.get("discovery_source") or ""),
+        )
+        if canary_scaled_quote != order.quote_amount:
+            order = replace(order, quote_amount=canary_scaled_quote)
+            indicators["trade_learning_shadow_canary"] = "true"
+            indicators["trade_learning_shadow_canary_factor"] = str(canary_factor)
+            reasons.append(
+                f"Trade learning shadow canary sizing applied: quote {order.quote_amount} USDT "
+                f"(x{canary_factor})."
+            )
 
     if order and not order.reduce_only:
         qmult = quadrant_quote_fraction_mult(indicators, quadrant_cfg)
@@ -2710,6 +2725,10 @@ def apply_risk_controls(
             indicators["trade_learning_shadow_first"] = "true"
             indicators["trade_learning_shadow_reason"] = shadow_reason
             reasons.append(f"{shadow_reason} Live deferred to shadow paper.")
+        elif shadow_reason:
+            indicators["trade_learning_shadow_canary"] = "true"
+            indicators["trade_learning_shadow_canary_reason"] = shadow_reason
+            reasons.append(f"{shadow_reason}; live canary allowed.")
 
     from bucket_strategy import bucket_open_block_reasons, bucket_strategy_from_config
 

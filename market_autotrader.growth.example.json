@@ -273,7 +273,14 @@
     "shadow_graduation_enabled": true,
     "min_shadow_bucket_sample": 6,
     "min_shadow_global_sample": 10,
-    "shadow_outcomes_path": "logs/shadow-paper-outcomes.jsonl"
+    "shadow_outcomes_path": "logs/shadow-paper-outcomes.jsonl",
+    "shadow_canary_enabled": true,
+    "shadow_canary_min_sample": 30,
+    "shadow_canary_min_win_rate": "0.45",
+    "shadow_canary_min_profit_factor": "1.05",
+    "shadow_canary_min_total_pnl": "1.0",
+    "shadow_canary_max_live_sample": 3,
+    "shadow_canary_factor": "0.25"
   },
   "trade_lessons": {
     "enabled": true,

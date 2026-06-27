@@ -9,6 +9,7 @@ import unittest
 
 from trade_outcomes import (
     apply_bucket_sizing_factor,
+    apply_shadow_canary_factor,
     apply_sizing_factor,
     compute_trade_learning_snapshot,
     outcome_pnl,
@@ -40,6 +41,18 @@ def test_apply_bucket_sizing_factor_scales_bucket():
     )
     assert pinned == Decimal("65.00")
     assert pinned_factor == Decimal("0.65")
+
+
+def test_apply_shadow_canary_factor_scales_bucket():
+    snapshot = {"enabled": True, "bucketCanaryFactors": {"futuresLosers": "0.25"}}
+    result, factor = apply_shadow_canary_factor(
+        Decimal("100"),
+        snapshot,
+        bucket="futuresLosers",
+        source="discovery:futuresLosers",
+    )
+    assert result == Decimal("25.00")
+    assert factor == Decimal("0.25")
 
 
 def test_required_confidence_bump():
@@ -537,6 +550,56 @@ def test_shadow_graduation_does_not_override_weak_live_bucket(tmp_path: Path):
     snapshot = compute_trade_learning_snapshot(cfg)
     assert snapshot["bucketLiveModes"]["futuresTopVolume"] == "shadow_first"
     assert "live lock" in snapshot.get("bucketGraduations", {}).get("futuresTopVolume", "")
+
+
+def test_shadow_canary_allows_small_live_probe_under_live_lock(tmp_path: Path):
+    outcomes = tmp_path / "live-outcomes.jsonl"
+    shadow_outcomes = tmp_path / "shadow-outcomes.jsonl"
+    cfg = trade_learning_from_config(
+        {
+            "enabled": True,
+            "outcomes_path": str(outcomes),
+            "state_path": str(tmp_path / "state.json"),
+            "shadow_outcomes_path": str(shadow_outcomes),
+            "min_bucket_sample": 4,
+            "min_shadow_bucket_sample": 6,
+            "shadow_graduation_enabled": True,
+            "shadow_canary_enabled": True,
+            "shadow_canary_min_sample": 6,
+            "shadow_canary_min_win_rate": "0.45",
+            "shadow_canary_min_profit_factor": "1.05",
+            "shadow_canary_min_total_pnl": "1",
+            "shadow_canary_max_live_sample": 4,
+            "shadow_canary_factor": "0.25",
+        }
+    )
+    for i in range(4):
+        _record_with_bucket(cfg, symbol=f"BAD{i}USDT", pnl=Decimal("-1"), bucket="futuresLosers")
+
+    from shadow_paper import append_shadow_trade
+
+    for i, pnl in enumerate(["1", "1", "1", "-0.2", "-0.2", "-0.2"]):
+        append_shadow_trade(
+            str(shadow_outcomes),
+            {
+                "symbol": f"SH{i}USDT",
+                "realizedPnl": pnl,
+                "bucket": "futuresLosers",
+                "closedAt": 100 + i,
+            },
+        )
+
+    snapshot = compute_trade_learning_snapshot(cfg)
+    assert snapshot["bucketLiveModes"]["futuresLosers"] == "shadow_first"
+    assert "live lock" in snapshot.get("bucketGraduations", {}).get("futuresLosers", "")
+    assert snapshot["shadowCanaryBuckets"] == ["futuresLosers"]
+    assert snapshot["bucketCanaryFactors"]["futuresLosers"] == "0.25"
+    shadow, reason = trade_learning_discovery_shadow_first(
+        snapshot, cfg=cfg, bucket="futuresLosers", is_discovery_open=True
+    )
+    assert shadow is False
+    assert reason is not None
+    assert "shadow canary" in reason
 
 
 def test_shadow_graduation_not_live_locked_when_live_bucket_is_profitable_edge(tmp_path: Path):
