@@ -1,0 +1,874 @@
+{
+  "paper_only": true,
+  "orders_sent": 0,
+  "parameters_reselected": false,
+  "frozen_preset": {
+    "allow_short": true,
+    "atr_multiple": "3",
+    "weekly_sma": 20,
+    "daily_sma": 50,
+    "confirm_bars": 3,
+    "min_hold_bars": 30,
+    "ema": 180,
+    "lookbacks": [
+      48,
+      180,
+      540
+    ],
+    "weights": [
+      "0.2",
+      "0.3",
+      "0.5"
+    ],
+    "entry": 120,
+    "exit": 40,
+    "name": "tsmom_slow_4h",
+    "filter": "daily_long_weekly_short"
+  },
+  "symbols": [
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT",
+    "XRPUSDT"
+  ],
+  "limitations": [
+    "The rule was chosen after seeing BTC results, then applied here without a new search.",
+    "These perps move with BTC, so the sample is not an independent economic regime.",
+    "Bars before 2021-01-01 are indicator warmup only and are not scored.",
+    "2026-08-01 onward is scored only after this four-coin rule passes.",
+    "Maintenance margin is the same approximation used on BTC, not an exchange bracket.",
+    "A missing funding rate or mark is left missing and is not booked as zero."
+  ],
+  "decision": {
+    "passed": true,
+    "positive_symbols": [
+      "ETHUSDT",
+      "SOLUSDT",
+      "BNBUSDT",
+      "XRPUSDT"
+    ],
+    "positive_count": 4,
+    "required_positive": 3,
+    "liquidations": 0,
+    "portfolio_sharpe": "0.9958733527667911652534391057",
+    "min_portfolio_sharpe": "0.5"
+  },
+  "portfolio": {
+    "weighting": "equal starting cash, unmarked coins stay in cash",
+    "starting_equity": "40000",
+    "net_pnl": "28812.06704980207496453276470",
+    "sharpe": "0.9958733527667911652534391057",
+    "max_drawdown": "0.1144677788529283117095335534",
+    "by_side": {
+      "long": {
+        "net_pnl": "30451.16179527886560527206415"
+      },
+      "short": {
+        "net_pnl": "2452.290680367875847521619038"
+      }
+    }
+  },
+  "coins": {
+    "ETHUSDT": {
+      "metrics": {
+        "net_pnl": "5031.46005342619635012735567",
+        "annualized_return": "0.075776660681096381332573756",
+        "max_drawdown": "0.1637561479424281414204610977",
+        "sharpe": "0.7265106669410085965996429950",
+        "fees": "206.3323565528815495077388381",
+        "funding_pnl": "-1182.132999838512056637841146",
+        "funding_missing_events": 6,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 87
+        },
+        "mean_effective_leverage": "0.1881845877307241418986536025",
+        "trades": 87,
+        "win_rate": "0.3218390804597701149425287356",
+        "payoff_ratio": "4.551017461902412126885353583",
+        "by_side": {
+          "long": {
+            "trades": 47,
+            "net_pnl": "4858.773311243851044558415245"
+          },
+          "short": {
+            "trades": 40,
+            "net_pnl": "1457.132175738326470478295424"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "1545.80902311037009031725190",
+            "max_drawdown": "0.1365082031926454483375385112",
+            "trades": "12",
+            "by_side": {
+              "long": {
+                "trades": 10,
+                "net_pnl": "2317.917190261029571946648660"
+              },
+              "short": {
+                "trades": 2,
+                "net_pnl": "-28.15928482507900757650305737"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "67.64309469780458943127328",
+            "max_drawdown": "0.07572211261798010419257790138",
+            "trades": "17",
+            "by_side": {
+              "long": {
+                "trades": 2,
+                "net_pnl": "-239.3132915447545873236923584"
+              },
+              "short": {
+                "trades": 15,
+                "net_pnl": "332.8149684756382356101268880"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "523.44109081647897610191639",
+            "max_drawdown": "0.1288976690729643642575628971",
+            "trades": "21",
+            "by_side": {
+              "long": {
+                "trades": 15,
+                "net_pnl": "33.1273232616962155248784839"
+              },
+              "short": {
+                "trades": 6,
+                "net_pnl": "-105.4616410009332711884216406"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "744.14275869931673390476674",
+            "max_drawdown": "0.1298386961193105815770217918",
+            "trades": "15",
+            "by_side": {
+              "long": {
+                "trades": 10,
+                "net_pnl": "1770.264721189197031733443921"
+              },
+              "short": {
+                "trades": 5,
+                "net_pnl": "5.65495207226206323929666223"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "1889.16821673779041068779393",
+            "max_drawdown": "0.04430523715348214042858841613",
+            "trades": "12",
+            "by_side": {
+              "long": {
+                "trades": 7,
+                "net_pnl": "1366.701442848936287292692061"
+              },
+              "short": {
+                "trades": 5,
+                "net_pnl": "586.6818295576927866082941399"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "257.53122157363832016397727",
+            "max_drawdown": "0.08209585480608884566317219071",
+            "trades": "10",
+            "by_side": {
+              "long": {
+                "trades": 3,
+                "net_pnl": "-389.9240747722534746155555244"
+              },
+              "short": {
+                "trades": 7,
+                "net_pnl": "665.6013514587456637855024315"
+              }
+            }
+          }
+        }
+      },
+      "cost_stress": {
+        "net_pnl": "4503.84324152453583593305710",
+        "annualized_return": "0.068909586767582853656984801",
+        "max_drawdown": "0.1846033875409580955885514144",
+        "sharpe": "0.6673997531556009841310348955",
+        "fees": "405.1254995177819991581505392",
+        "funding_pnl": "-1168.229844009807361993417901",
+        "funding_missing_events": 6,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 88
+        },
+        "mean_effective_leverage": "0.1872639245107517945427906956",
+        "trades": 88,
+        "win_rate": "0.3181818181818181818181818182",
+        "payoff_ratio": "4.396299882915922438506878505",
+        "by_side": {
+          "long": {
+            "trades": 48,
+            "net_pnl": "4569.093836995012047518343878"
+          },
+          "short": {
+            "trades": 40,
+            "net_pnl": "1303.895796668653798761454328"
+          }
+        }
+      },
+      "buy_and_hold": {
+        "net_pnl": "-6896.14975073535838994207664",
+        "funding_pnl": "-22137.74723185130022233036716",
+        "funding_missing_events": 9,
+        "ending_equity": "3103.85024926464161005792336"
+      },
+      "first_bar": "2020-01-01T00:00:00+00:00",
+      "allow_short": true,
+      "interior_gap_months": [],
+      "missing_funding_months": 0
+    },
+    "SOLUSDT": {
+      "metrics": {
+        "net_pnl": "8281.21016465006709169579610",
+        "annualized_return": "0.114182875654418584539100324",
+        "max_drawdown": "0.1679530657311216171369444036",
+        "sharpe": "0.8729184331912125885960902449",
+        "fees": "217.7650267850535457102109544",
+        "funding_pnl": "-1191.508735509066096618937063",
+        "funding_missing_events": 14,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 102
+        },
+        "mean_effective_leverage": "0.1340679036880015081071040558",
+        "trades": 101,
+        "win_rate": "0.3267326732673267326732673267",
+        "payoff_ratio": "4.573210638813082681577097637",
+        "by_side": {
+          "long": {
+            "trades": 45,
+            "net_pnl": "8434.425091768429460398595103"
+          },
+          "short": {
+            "trades": 56,
+            "net_pnl": "970.0601431447359541948757476"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "3476.76798464104372586203863",
+            "max_drawdown": "0.1517110542056318406542326977",
+            "trades": "13",
+            "by_side": {
+              "long": {
+                "trades": 10,
+                "net_pnl": "4248.535114117061426268942751"
+              },
+              "short": {
+                "trades": 3,
+                "net_pnl": "-344.1461457717317920003953779"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "1120.69446918272304823099386",
+            "max_drawdown": "0.06078340280636462269739554901",
+            "trades": "20",
+            "by_side": {
+              "long": {
+                "trades": 1,
+                "net_pnl": "-147.3572107618805849423963938"
+              },
+              "short": {
+                "trades": 19,
+                "net_pnl": "979.9817949959899605407395037"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "3005.05947734739633892225171",
+            "max_drawdown": "0.1152705694788417689981724240",
+            "trades": "17",
+            "by_side": {
+              "long": {
+                "trades": 10,
+                "net_pnl": "-951.8250367923602322168974375"
+              },
+              "short": {
+                "trades": 7,
+                "net_pnl": "-185.9049746361534770851073071"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "-920.18119750599311274304652",
+            "max_drawdown": "0.1245895529440256261833640121",
+            "trades": "23",
+            "by_side": {
+              "long": {
+                "trades": 15,
+                "net_pnl": "5182.600504449623721533827732"
+              },
+              "short": {
+                "trades": 8,
+                "net_pnl": "-858.4244082581237248607593141"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "967.95338186618566976987099",
+            "max_drawdown": "0.07632825914089803750591449379",
+            "trades": "11",
+            "by_side": {
+              "long": {
+                "trades": 7,
+                "net_pnl": "225.3942562827007237634707226"
+              },
+              "short": {
+                "trades": 4,
+                "net_pnl": "459.0386596855896104320116801"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "544.48208952917443414578356",
+            "max_drawdown": "0.07687258333563881920598502449",
+            "trades": "17",
+            "by_side": {
+              "long": {
+                "trades": 2,
+                "net_pnl": "-122.9225355267155940083522708"
+              },
+              "short": {
+                "trades": 15,
+                "net_pnl": "919.5152171291653771683865633"
+              }
+            }
+          }
+        }
+      },
+      "cost_stress": {
+        "net_pnl": "7949.11146495052198166883984",
+        "annualized_return": "0.110528052296272388127874988",
+        "max_drawdown": "0.1737251227594637402901158759",
+        "sharpe": "0.8483747094137909874495011236",
+        "fees": "431.3532353732837364907049209",
+        "funding_pnl": "-1184.874903867278462857994136",
+        "funding_missing_events": 14,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 102
+        },
+        "mean_effective_leverage": "0.1340679036880015081071040558",
+        "trades": 101,
+        "win_rate": "0.3168316831683168316831683168",
+        "payoff_ratio": "4.704867940870010025417233858",
+        "by_side": {
+          "long": {
+            "trades": 45,
+            "net_pnl": "8315.471411603775018690090358"
+          },
+          "short": {
+            "trades": 56,
+            "net_pnl": "860.3238332814898108535297974"
+          }
+        }
+      },
+      "buy_and_hold": {
+        "net_pnl": "225403.4832838522191953067886",
+        "funding_pnl": "-248566.3390659117906431562839",
+        "funding_missing_events": 24,
+        "ending_equity": "235403.4832838522191953067886"
+      },
+      "first_bar": "2020-09-14T04:00:00+00:00",
+      "allow_short": true,
+      "interior_gap_months": [],
+      "missing_funding_months": 8
+    },
+    "BNBUSDT": {
+      "metrics": {
+        "net_pnl": "12587.46562433584926402592254",
+        "annualized_return": "0.157231033630833644985185619",
+        "max_drawdown": "0.2864184106267507176642756098",
+        "sharpe": "0.8749286797901573093107791477",
+        "fees": "525.9111115971352937208855435",
+        "funding_pnl": "-971.4289375516450035646071447",
+        "funding_missing_events": 16,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 120
+        },
+        "mean_effective_leverage": "0.2497486191748827156012000082",
+        "trades": 120,
+        "win_rate": "0.2833333333333333333333333333",
+        "payoff_ratio": "5.510270532806763397847130430",
+        "by_side": {
+          "long": {
+            "trades": 65,
+            "net_pnl": "14519.86685377350235926833173"
+          },
+          "short": {
+            "trades": 55,
+            "net_pnl": "-701.8296320071859651884147570"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "5191.71057966755369198002747",
+            "max_drawdown": "0.1825768836822666981972513679",
+            "trades": "10",
+            "by_side": {
+              "long": {
+                "trades": 8,
+                "net_pnl": "6263.425403502603580191183634"
+              },
+              "short": {
+                "trades": 2,
+                "net_pnl": "-161.7187151257361506928848523"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "469.24816374399112792624859",
+            "max_drawdown": "0.08136656811106830623870724586",
+            "trades": "20",
+            "by_side": {
+              "long": {
+                "trades": 6,
+                "net_pnl": "-48.84064205175218027144775685"
+              },
+              "short": {
+                "trades": 14,
+                "net_pnl": "-44.90363438735699046552783599"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "-364.31559803169751802849283",
+            "max_drawdown": "0.1075550648204301760510804813",
+            "trades": "31",
+            "by_side": {
+              "long": {
+                "trades": 16,
+                "net_pnl": "-912.4170758030729260545986409"
+              },
+              "short": {
+                "trades": 15,
+                "net_pnl": "408.0727925898766153334675507"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "3763.44440843302374998321624",
+            "max_drawdown": "0.1774014332326652635742557243",
+            "trades": "22",
+            "by_side": {
+              "long": {
+                "trades": 19,
+                "net_pnl": "4874.995450278754436119024134"
+              },
+              "short": {
+                "trades": 3,
+                "net_pnl": "-342.3450046990860622495931403"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "3256.82508396619829568151696",
+            "max_drawdown": "0.1714012130751268656870368112",
+            "trades": "25",
+            "by_side": {
+              "long": {
+                "trades": 13,
+                "net_pnl": "4848.095225147722849535654426"
+              },
+              "short": {
+                "trades": 12,
+                "net_pnl": "-1340.931377961726541422409536"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "251.29005383588353623825639",
+            "max_drawdown": "0.05822834037199087930968719371",
+            "trades": "12",
+            "by_side": {
+              "long": {
+                "trades": 3,
+                "net_pnl": "-505.3915073007534002514840743"
+              },
+              "short": {
+                "trades": 9,
+                "net_pnl": "779.9963075768431643085330577"
+              }
+            }
+          }
+        }
+      },
+      "cost_stress": {
+        "net_pnl": "11718.88190980619056906689742",
+        "annualized_return": "0.149126793081400565655841746",
+        "max_drawdown": "0.2958588066831642922899100124",
+        "sharpe": "0.8370763932121878195610740758",
+        "fees": "1029.478096129357328675937038",
+        "funding_pnl": "-969.1415048400704896909063029",
+        "funding_missing_events": 16,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 120
+        },
+        "mean_effective_leverage": "0.2496316439829569494887748592",
+        "trades": 120,
+        "win_rate": "0.275",
+        "payoff_ratio": "5.587348719961361525322429399",
+        "by_side": {
+          "long": {
+            "trades": 65,
+            "net_pnl": "14066.11524231877026384456919"
+          },
+          "short": {
+            "trades": 55,
+            "net_pnl": "-870.8504142631979532590952500"
+          }
+        }
+      },
+      "buy_and_hold": {
+        "net_pnl": "151369.1995660727189812433154",
+        "funding_pnl": "4412.406928524590638997326114",
+        "funding_missing_events": 27,
+        "ending_equity": "161369.1995660727189812433154"
+      },
+      "first_bar": "2020-02-10T08:00:00+00:00",
+      "allow_short": true,
+      "interior_gap_months": [],
+      "missing_funding_months": 1
+    },
+    "XRPUSDT": {
+      "metrics": {
+        "net_pnl": "2911.93120738996225868369039",
+        "annualized_return": "0.046867756837613232931790891",
+        "max_drawdown": "0.2932645896106452370725578496",
+        "sharpe": "0.4035946353779440558151509723",
+        "fees": "197.3173581058943238623167934",
+        "funding_pnl": "-490.7773831129675846252361839",
+        "funding_missing_events": 17,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 117
+        },
+        "mean_effective_leverage": "0.1656010002164418207621296017",
+        "trades": 116,
+        "win_rate": "0.2931034482758620689655172414",
+        "payoff_ratio": "3.791537725491260273919792187",
+        "by_side": {
+          "long": {
+            "trades": 62,
+            "net_pnl": "2638.096538493082741046722073"
+          },
+          "short": {
+            "trades": 54,
+            "net_pnl": "726.9279934919993880368626234"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "301.558012220698311113495133",
+            "max_drawdown": "0.1445023888176132714115773394",
+            "trades": "14",
+            "by_side": {
+              "long": {
+                "trades": 11,
+                "net_pnl": "484.4453979456494957186624210"
+              },
+              "short": {
+                "trades": 3,
+                "net_pnl": "-18.24902674513299032700226612"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "-343.227759854314629342258367",
+            "max_drawdown": "0.09086712010480982122145972213",
+            "trades": "23",
+            "by_side": {
+              "long": {
+                "trades": 8,
+                "net_pnl": "-314.9698086781854651366374599"
+              },
+              "short": {
+                "trades": 15,
+                "net_pnl": "40.91235155733241602709630362"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "-638.964149161878758175357200",
+            "max_drawdown": "0.1042499013421902942025983195",
+            "trades": "21",
+            "by_side": {
+              "long": {
+                "trades": 14,
+                "net_pnl": "-395.8166185718211427204882060"
+              },
+              "short": {
+                "trades": 7,
+                "net_pnl": "-117.7211982960355039400559380"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "2792.607809317605881904693147",
+            "max_drawdown": "0.1620634695284714404417693060",
+            "trades": "26",
+            "by_side": {
+              "long": {
+                "trades": 14,
+                "net_pnl": "3044.383500752974547269637328"
+              },
+              "short": {
+                "trades": 12,
+                "net_pnl": "-156.6152017403448584331248044"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "-268.13581550601546382186203",
+            "max_drawdown": "0.09077782938880595925345317886",
+            "trades": "21",
+            "by_side": {
+              "long": {
+                "trades": 14,
+                "net_pnl": "-192.4607789415026302956807527"
+              },
+              "short": {
+                "trades": 7,
+                "net_pnl": "-338.7988027925570194644519582"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "1093.91926734973977913732826",
+            "max_drawdown": "0.04981022667935512760021725330",
+            "trades": "11",
+            "by_side": {
+              "long": {
+                "trades": 1,
+                "net_pnl": "12.51484598596793621122874284"
+              },
+              "short": {
+                "trades": 10,
+                "net_pnl": "1317.399871508737344174401287"
+              }
+            }
+          }
+        }
+      },
+      "cost_stress": {
+        "net_pnl": "2451.62911668172213599612040",
+        "annualized_return": "0.040079217405302158995068131",
+        "max_drawdown": "0.3123959976715657017879715686",
+        "sharpe": "0.3560055271947122680834238283",
+        "fees": "393.4234512548899328245164803",
+        "funding_pnl": "-485.0013070511213302371144775",
+        "funding_missing_events": 17,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 118
+        },
+        "mean_effective_leverage": "0.1670334142005409244372112891",
+        "trades": 117,
+        "win_rate": "0.2905982905982905982905982906",
+        "payoff_ratio": "3.664481166459422454680963564",
+        "by_side": {
+          "long": {
+            "trades": 62,
+            "net_pnl": "2486.870673258331535240967935"
+          },
+          "short": {
+            "trades": 55,
+            "net_pnl": "515.8533210839758376236043828"
+          }
+        }
+      },
+      "buy_and_hold": {
+        "net_pnl": "8817.18969633651397494305238",
+        "funding_pnl": "-29509.49978703478443052391801",
+        "funding_missing_events": 24,
+        "ending_equity": "18817.18969633651397494305238"
+      },
+      "first_bar": "2020-01-06T08:00:00+00:00",
+      "allow_short": true,
+      "interior_gap_months": [],
+      "missing_funding_months": 0
+    }
+  },
+  "holdout_evaluated": true,
+  "holdout": {
+    "BTCUSDT": {
+      "net_pnl": "-218.751204486255482297172819",
+      "annualized_return": "-0.0840656432885961511169696331",
+      "max_drawdown": "0.02424419975776506674463829656",
+      "sharpe": "-1.531254196034718287296066377",
+      "fees": "15.73311732708153231384307208",
+      "funding_pnl": "-8.209096893918664999193027115",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 5
+      },
+      "mean_effective_leverage": "0.3163785460271132899677581806",
+      "trades": 5,
+      "win_rate": "0.2",
+      "payoff_ratio": "1.074742290115490818257108346",
+      "by_side": {
+        "long": {
+          "trades": 3,
+          "net_pnl": "-74.95136935431391629600634858"
+        },
+        "short": {
+          "trades": 2,
+          "net_pnl": "-127.7374877442813726401059475"
+        }
+      },
+      "evaluated_once": true
+    },
+    "ETHUSDT": {
+      "net_pnl": "191.65809638749678453450752",
+      "annualized_return": "0.078283436202730671444814423",
+      "max_drawdown": "0.01335320593572509175617307152",
+      "sharpe": "1.475020360128634464051578061",
+      "fees": "1.558707657516311443702315456",
+      "funding_pnl": "-11.74886764207998398287596798",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 1
+      },
+      "mean_effective_leverage": "0.1456224821672764903721772554",
+      "trades": 1,
+      "win_rate": "1",
+      "payoff_ratio": "0",
+      "by_side": {
+        "long": {
+          "trades": 1,
+          "net_pnl": "204.1350764404131509692443741"
+        },
+        "short": {
+          "trades": 0,
+          "net_pnl": "0"
+        }
+      },
+      "evaluated_once": true
+    },
+    "SOLUSDT": {
+      "net_pnl": "305.36026141129233020084366",
+      "annualized_return": "0.126839959782839844497167680",
+      "max_drawdown": "0.02806922399568941560962954243",
+      "sharpe": "1.446693717366747719710533002",
+      "fees": "4.491696172715251730450987172",
+      "funding_pnl": "-7.117436186021615220057750456",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 2
+      },
+      "mean_effective_leverage": "0.2124827540644651690907533326",
+      "trades": 2,
+      "win_rate": "0.5",
+      "payoff_ratio": "4.088399864173251267351974939",
+      "by_side": {
+        "long": {
+          "trades": 1,
+          "net_pnl": "416.4571543776807093020864873"
+        },
+        "short": {
+          "trades": 1,
+          "net_pnl": "-101.8631171640291384074353173"
+        }
+      },
+      "evaluated_once": true
+    },
+    "BNBUSDT": {
+      "net_pnl": "286.09283721844382131263296",
+      "annualized_return": "0.118498941159677660536773914",
+      "max_drawdown": "0.03921786129568462580784159947",
+      "sharpe": "1.086474944457561050312735967",
+      "fees": "6.188148060766630408087843655",
+      "funding_pnl": "-21.29377555501920429418481866",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 2
+      },
+      "mean_effective_leverage": "0.3005551151693526117146016304",
+      "trades": 2,
+      "win_rate": "1",
+      "payoff_ratio": "0",
+      "by_side": {
+        "long": {
+          "trades": 2,
+          "net_pnl": "310.4022931136377833968579798"
+        },
+        "short": {
+          "trades": 0,
+          "net_pnl": "0"
+        }
+      },
+      "evaluated_once": true
+    },
+    "XRPUSDT": {
+      "net_pnl": "-145.778525607929069088200764",
+      "annualized_return": "-0.0566346670890851963435850226",
+      "max_drawdown": "0.03657728789591557709123069217",
+      "sharpe": "-0.6736429141083512260973888109",
+      "fees": "5.128135592028344398446359724",
+      "funding_pnl": "-2.692550144486508969740314857",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 3
+      },
+      "mean_effective_leverage": "0.1709509200806986333441089128",
+      "trades": 3,
+      "win_rate": "0.3333333333333333333333333333",
+      "payoff_ratio": "0.2608303770244402566920819055",
+      "by_side": {
+        "long": {
+          "trades": 2,
+          "net_pnl": "-38.47836867600136435192037950"
+        },
+        "short": {
+          "trades": 1,
+          "net_pnl": "-102.0593436813922356091030763"
+        }
+      },
+      "evaluated_once": true
+    }
+  }
+}

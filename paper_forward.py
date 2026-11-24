@@ -93,6 +93,10 @@ def load_paper_config(path: str | Path) -> dict[str, Any]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise PaperForwardError("config must be an object")
+    if str(payload.get("portfolio", "")) == "alt_slow_momentum":
+        from paper_alt_forward import load_alt_config
+
+        return load_alt_config(payload, path)
     banned = _banned_keys(payload)
     if banned:
         raise PaperForwardError(f"paper config refuses credential or proxy fields: {', '.join(sorted(set(banned)))}")
@@ -776,17 +780,19 @@ def on_mark(state: dict[str, Any], config: dict[str, Any], mark: dict[str, Any])
     return events
 
 
-def normalize_stream(message: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_stream(message: dict[str, Any], allowed_symbols: frozenset[str] | None = None) -> dict[str, Any] | None:
     data = message.get("data", message)
     if not isinstance(data, dict):
         return None
     kind = data.get("e")
     symbol = str(data.get("s") or (data.get("k") or {}).get("s") or "")
-    if symbol and symbol.upper() != SYMBOL:
-        raise PaperForwardError(f"feed symbol {symbol} is not BTCUSDT; not switching market")
+    allowed = allowed_symbols or frozenset({SYMBOL})
+    if symbol and symbol.upper() not in allowed:
+        raise PaperForwardError(f"feed symbol {symbol} is not in the paper universe; not switching market")
     if kind == "bookTicker":
         return {
             "type": "book",
+            "symbol": symbol.upper() or SYMBOL,
             "bid": Decimal(str(data["b"])),
             "ask": Decimal(str(data["a"])),
             "event_ms": int(data.get("E") or data.get("T")),
@@ -796,6 +802,7 @@ def normalize_stream(message: dict[str, Any]) -> dict[str, Any] | None:
         index = data.get("i")
         return {
             "type": "mark",
+            "symbol": symbol.upper() or SYMBOL,
             "mark": Decimal(str(data["p"])),
             "index": None if index in (None, "") else Decimal(str(index)),
             "funding_rate": None if rate in (None, "") else Decimal(str(rate)),
@@ -808,6 +815,7 @@ def normalize_stream(message: dict[str, Any]) -> dict[str, Any] | None:
             raise PaperForwardError(f"kline interval {interval!r} is not a supported paper interval")
         return {
             "type": "kline",
+            "symbol": symbol.upper() or SYMBOL,
             "interval": interval,
             "open_ms": int(candle["t"]),
             "close_ms": int(candle["T"]),
@@ -1002,6 +1010,7 @@ def load_warmup_bars(
     cache_root: Path | None = None,
     fetcher: Callable[..., Any] | None = None,
     interval: str = "1d",
+    symbol: str = "BTCUSDT",
 ) -> list[dict[str, Any]]:
     """Completed daily trade klines from the public archive. No FAPI and no fills.
 
@@ -1029,7 +1038,7 @@ def load_warmup_bars(
     read = fetcher or fetch_vision_zip
     for month in reversed(months):
         stamp = f"{month.year:04d}-{month.month:02d}"
-        url = f"https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/{interval}/BTCUSDT-{interval}-{stamp}.zip"
+        url = f"https://data.binance.vision/data/futures/um/monthly/klines/{symbol}/{interval}/{symbol}-{interval}-{stamp}.zip"
         try:
             payload, _meta = read(url, cache)
             bars.extend(_bars_from_kline_zip(payload, today, interval))
@@ -1038,8 +1047,8 @@ def load_warmup_bars(
     day = date(today.year, today.month, 1)
     while day < today:
         url = (
-            f"https://data.binance.vision/data/futures/um/daily/klines/BTCUSDT/{interval}/"
-            f"BTCUSDT-{interval}-{day.isoformat()}.zip"
+            f"https://data.binance.vision/data/futures/um/daily/klines/{symbol}/{interval}/"
+            f"{symbol}-{interval}-{day.isoformat()}.zip"
         )
         try:
             payload, _meta = read(url, cache)
@@ -1171,6 +1180,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         config = load_paper_config(args.config)
+        if config.get("portfolio") == "alt_slow_momentum":
+            from paper_alt_forward import dispatch
+
+            return dispatch(args.command, config)
         if args.command == "preflight":
             return cmd_preflight(config)
         if args.command == "status":

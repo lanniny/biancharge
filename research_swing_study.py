@@ -57,13 +57,13 @@ def _months(start: date, end: date) -> list[date]:
     return out
 
 
-def _load(kind: str, interval: str, start: date, end: date) -> tuple[list[dict], list[str]]:
+def _load(kind: str, interval: str, start: date, end: date, symbol: str = "BTCUSDT") -> tuple[list[dict], list[str]]:
     rows: list[dict] = []
     missing = []
     folder = "klines" if kind == "trade" else "markPriceKlines"
     for month in _months(start, end):
         stamp = f"{month:%Y-%m}"
-        url = f"{ROOT}/monthly/{folder}/BTCUSDT/{interval}/BTCUSDT-{interval}-{stamp}.zip"
+        url = f"{ROOT}/monthly/{folder}/{symbol}/{interval}/{symbol}-{interval}-{stamp}.zip"
         try:
             payload, _meta = fetch_vision_zip(url, Path("data/research-cache"))
             rows.extend(parse_vision_kline_csv(zip_csv_text(payload)))
@@ -74,12 +74,12 @@ def _load(kind: str, interval: str, start: date, end: date) -> tuple[list[dict],
     return kept, missing
 
 
-def _funding(start: date, end: date) -> tuple[list[tuple[datetime, Decimal]], int]:
+def _funding(start: date, end: date, symbol: str = "BTCUSDT") -> tuple[list[tuple[datetime, Decimal]], int]:
     events: list[tuple[datetime, Decimal]] = []
     missing = 0
     for month in _months(start, end):
         stamp = f"{month:%Y-%m}"
-        url = f"{ROOT}/monthly/fundingRate/BTCUSDT/BTCUSDT-fundingRate-{stamp}.zip"
+        url = f"{ROOT}/monthly/fundingRate/{symbol}/{symbol}-fundingRate-{stamp}.zip"
         try:
             payload, _meta = fetch_vision_zip(url, Path("data/research-cache"))
             events.extend(parse_vision_funding_csv(zip_csv_text(payload)))
@@ -712,17 +712,19 @@ def run_swing_study(config: dict[str, Any], grids: dict | None = None, iteration
     }
 
 
-def _buy_hold(candles, funding, equity0, fee, model) -> dict[str, Any]:
+def _buy_hold(candles, funding, equity0, fee, model, start: datetime | None = None, end: datetime | None = None) -> dict[str, Any]:
     if not candles:
         return {}
-    first = next(bar for bar in candles if bar.ts >= datetime(2021, 1, 1, tzinfo=timezone.utc))
+    start = start or datetime(2021, 1, 1, tzinfo=timezone.utc)
+    end = end or HOLDOUT_START_DT
+    first = next(bar for bar in candles if bar.ts >= start)
     qty = (equity0 * (Decimal(1) - fee)) / first.open
     cash = equity0 - qty * first.open * (Decimal(1) + fee)
     missed = 0
     funding_pnl = Decimal("0")
     cursor = 0
     for stamp, rate in funding:
-        if stamp < first.ts or stamp >= HOLDOUT_START_DT:
+        if stamp < first.ts or stamp >= end:
             continue
         while cursor + 1 < len(candles) and candles[cursor + 1].ts <= stamp:
             cursor += 1
@@ -733,7 +735,7 @@ def _buy_hold(candles, funding, equity0, fee, model) -> dict[str, Any]:
         payment = qty * mark * rate
         cash -= payment
         funding_pnl -= payment
-    last = candles[-1] if candles[-1].ts < HOLDOUT_START_DT else next(bar for bar in reversed(candles) if bar.ts < HOLDOUT_START_DT)
+    last = candles[-1] if candles[-1].ts < end else next(bar for bar in reversed(candles) if bar.ts < end)
     equity = cash + qty * (last.mark_close or last.close)
     return {
         "net_pnl": _d(equity - equity0),

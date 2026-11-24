@@ -1,0 +1,63 @@
+{
+  "mode": "paper",
+  "portfolio": "alt_slow_momentum",
+  "symbols": [
+    "ETHUSDT",
+    "SOLUSDT",
+    "BNBUSDT",
+    "XRPUSDT"
+  ],
+  "product": "binance_usdt_perp",
+  "starting_equity": "10000",
+  "leverage_policy": "risk_bounded_dynamic",
+  "max_contract_leverage": 50,
+  "bar_interval": "4h",
+  "fee_bps": "5",
+  "slippage_bps": "2",
+  "risk_per_trade_pct": "0.01",
+  "maintenance_rate": "0.004",
+  "liquidation_fee_rate": "0.005",
+  "extra_buffer": "0.001",
+  "stale_mark_seconds": 30,
+  "stale_book_seconds": 15,
+  "heartbeat_seconds": 30,
+  "state_path": "paper-state/alt-slow-momentum-state.json",
+  "log_path": "paper-state/alt-slow-momentum.jsonl",
+  "stop_path": "paper-state/alt-slow-momentum.stop",
+  "strategy": {
+    "name": "tsmom_slow_4h",
+    "preset": {
+      "allow_short": true,
+      "atr_multiple": "3",
+      "weekly_sma": 20,
+      "daily_sma": 50,
+      "confirm_bars": 3,
+      "min_hold_bars": 30,
+      "ema": 180,
+      "lookbacks": [
+        48,
+        180,
+        540
+      ],
+      "weights": [
+        "0.2",
+        "0.3",
+        "0.5"
+      ],
+      "entry": 120,
+      "exit": 40,
+      "name": "tsmom_slow_4h",
+      "filter": "daily_long_weekly_short"
+    }
+  },
+  "feed": {
+    "type": "binance_usdt_m_public_ws",
+    "mark_kline_url": "wss://fstream.binance.com/market/stream?streams=ethusdt@markPrice@1s/ethusdt@kline_4h/solusdt@markPrice@1s/solusdt@kline_4h/bnbusdt@markPrice@1s/bnbusdt@kline_4h/xrpusdt@markPrice@1s/xrpusdt@kline_4h",
+    "book_url": "wss://fstream.binance.com/stream?streams=ethusdt@bookTicker/solusdt@bookTicker/bnbusdt@bookTicker/xrpusdt@bookTicker"
+  },
+  "notes": [
+    "第二套纸面进程。每个币各 10000 USDT，不读取、不覆盖 btcusdt-paper-state.json。",
+    "规则是 BTC 走步选中的非对称慢速动量，参数没有在这些币上重选。做多和做空都允许。",
+    "四币在 2026-08-01 前通过了预先写死的标准。保留段里 BTC 和 XRP 为负，不能当成稳定优势。"
+  ]
+}
