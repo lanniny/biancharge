@@ -31,3 +31,13 @@ python paper_forward.py stop --config paper_forward.example.json
 FAPI REST 若返回 HTTP 451，不要用代理绕过，也不要把现货行情当成永续。预检失败就不要 start。
 
 状态和日志写在 `paper-state/`。停止命令只写 stop 文件，让正在运行的进程自己退出。
+
+正在运行的进程应继续使用 `paper_forward.example.json`（固定 1 倍）。`paper_forward.dynamic.example.json` 是以后可选的纸面配置：信号仍是同一套日线规则，杠杆由风险预算和强平缓冲决定，不会为了用满 50 倍而放大仓位。重启前要停掉旧进程。已有持仓的保证金和杠杆不会被改写。
+
+4 小时 ATR 突破只在离线研究里：
+
+```powershell
+python research_leverage_study.py
+```
+
+2024 年以后的区间已经看过，不能再当成全新的样本外。

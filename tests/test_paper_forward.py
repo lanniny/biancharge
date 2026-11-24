@@ -225,6 +225,51 @@ class ForwardAccountingTests(unittest.TestCase):
                 {"data": {"e": "kline", "E": 1, "k": {"s": "BTCUSDT", "i": "1h", "t": 1, "T": 2, "o": "1", "h": "1", "l": "1", "c": "1", "x": True}}},
             )
 
+    def test_existing_flat_1x_state_is_not_rewritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "symbol": "BTCUSDT",
+                        "product": "binance_usdt_perp",
+                        "orders_sent": 0,
+                        "simulated_leverage": 1,
+                        "cash": "10000",
+                        "position": None,
+                        "fees": "0",
+                        "funding_pnl": "0",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            from paper_forward import load_state
+
+            loaded = load_state(path, _config())
+            self.assertEqual(loaded["cash"], "10000")
+            self.assertIsNone(loaded["position"])
+            self.assertEqual(loaded["simulated_leverage"], 1)
+
+    def test_open_1x_position_keeps_its_margin_on_migration(self) -> None:
+        from paper_forward import migrate_state
+
+        migrated = migrate_state(
+            {
+                "version": 1,
+                "symbol": "BTCUSDT",
+                "product": "binance_usdt_perp",
+                "orders_sent": 0,
+                "simulated_leverage": 1,
+                "cash": "9750",
+                "position": {"side": "long", "qty": "1", "entry": "100", "stop": "92", "margin": "100"},
+            }
+        )
+        self.assertEqual(migrated["cash"], "9750")
+        self.assertEqual(migrated["position"]["margin"], "100")
+        self.assertEqual(migrated["position"]["contract_leverage"], 1)
+        self.assertTrue(migrated["position"]["leverage_locked_from_prior_state"])
+
     def test_status_without_a_fresh_heartbeat_is_not_running(self) -> None:
         state = new_state(_config())
         state["running"] = True

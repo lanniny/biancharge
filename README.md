@@ -236,6 +236,8 @@ python paper_forward.py stop --config paper_forward.example.json
 
 `preflight` 只读连接 `wss://fstream.binance.com` 的公开行情。FAPI REST 在开发环境返回 HTTP 451，程序不调用它，也不用代理。打包文件是 `paper-forward-btcusdt.tar.gz`。本仓库的云端检查不能代替常驻机器上的持续纸面进程。
 
+动态杠杆研究在 `leverage_study.example.json`，结果在 `artifacts/research/leverage-study.json`。8% 止损配合 1% 风险预算时，规划器在真实 BTC 日线上始终停在 1 倍，没有为了用满 50 倍而放大仓位。4 小时 ATR 突破是另一条事先写死的离线规则，不是正在运行的纸面进程。2024 年以后的区间已经看过，标成复用样本。
+
 ### 明确限制
 
 - 不模拟期权、CME 期货，也不把现金 ETF 说成合约适配器。

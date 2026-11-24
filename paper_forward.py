@@ -105,16 +105,30 @@ def load_paper_config(path: str | Path) -> dict[str, Any]:
         raise PaperForwardError("forward runner is BTCUSDT only")
     if str(payload.get("product", "")).lower() != PRODUCT:
         raise PaperForwardError("forward runner is the USD-M perpetual only; spot is not a substitute")
-    leverage = int(payload.get("leverage", 0))
-    if leverage != 1:
-        raise PaperForwardError("this forward paper session uses simulated leverage 1")
+    policy = str(payload.get("leverage_policy", "fixed_1x"))
+    if policy not in {"fixed_1x", "risk_bounded_dynamic"}:
+        raise PaperForwardError("leverage_policy must be fixed_1x or risk_bounded_dynamic")
     strategy = payload.get("strategy") or {}
-    if int(strategy.get("fast_window", 0)) != 20 or int(strategy.get("slow_window", 0)) != 50:
-        raise PaperForwardError("strategy windows are frozen at MA 20/50")
-    if int(strategy.get("momentum_window", 0)) != 20:
-        raise PaperForwardError("momentum window is frozen at 20")
-    if Decimal(str(strategy.get("stop_pct", "0"))) != Decimal("0.08"):
-        raise PaperForwardError("stop is frozen at 8%")
+    if policy == "fixed_1x":
+        if int(payload.get("leverage", 0)) != 1:
+            raise PaperForwardError("the running fixed-1x paper session cannot change leverage")
+        if int(strategy.get("fast_window", 0)) != 20 or int(strategy.get("slow_window", 0)) != 50:
+            raise PaperForwardError("strategy windows are frozen at MA 20/50")
+        if int(strategy.get("momentum_window", 0)) != 20:
+            raise PaperForwardError("momentum window is frozen at 20")
+        if Decimal(str(strategy.get("stop_pct", "0"))) != Decimal("0.08"):
+            raise PaperForwardError("stop is frozen at 8%")
+    else:
+        ceiling = int(payload.get("max_contract_leverage", 0))
+        if not 1 <= ceiling <= 50:
+            raise PaperForwardError("dynamic contract leverage must stay inside 1..50")
+        # The live feed remains the daily MA. The 4h breakout is an offline track.
+        if int(strategy.get("fast_window", 0)) != 20 or int(strategy.get("slow_window", 0)) != 50:
+            raise PaperForwardError("strategy windows are frozen at MA 20/50")
+        if int(strategy.get("momentum_window", 0)) != 20:
+            raise PaperForwardError("momentum window is frozen at 20")
+        if Decimal(str(strategy.get("stop_pct", "0"))) != Decimal("0.08"):
+            raise PaperForwardError("stop is frozen at 8%")
     feed = payload.get("feed") or {}
     mark_url = str(feed.get("mark_kline_url", ""))
     book_url = str(feed.get("book_url", ""))
@@ -174,6 +188,24 @@ def new_state(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def migrate_state(payload: dict[str, Any]) -> dict[str, Any]:
+    """Read an existing 1x paper ledger without rewriting its cash or open margin."""
+    payload["version"] = int(payload.get("version", 1))
+    payload.setdefault("leverage_changes_sent", 0)
+    payload.setdefault("simulated_leverage", 1)
+    payload.setdefault("orders_sent", 0)
+    position = payload.get("position")
+    if isinstance(position, dict) and "contract_leverage" not in position:
+        assumed = int(position.get("leverage") or payload.get("simulated_leverage") or 1)
+        position["contract_leverage"] = assumed
+        position["leverage_locked_from_prior_state"] = True
+        payload["migration"] = {
+            "open_position_margin_unchanged": True,
+            "assumed_contract_leverage": assumed,
+        }
+    return payload
+
+
 def load_state(path: Path, config: dict[str, Any]) -> dict[str, Any]:
     if not path.exists():
         return new_state(config)
@@ -182,7 +214,7 @@ def load_state(path: Path, config: dict[str, Any]) -> dict[str, Any]:
         raise PaperForwardError("state file is not the BTCUSDT USD-M paper ledger")
     if int(payload.get("orders_sent", 0)) != 0:
         raise PaperForwardError("state claims orders were sent; refusing to continue")
-    return payload
+    return migrate_state(payload)
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
@@ -253,6 +285,8 @@ def _slip(price: Decimal, side: str, config: dict[str, Any]) -> Decimal:
 
 
 def _open_long(state: dict[str, Any], config: dict[str, Any], raw: Decimal, event_ms: int, reason: str, signal_open_ms: int) -> dict[str, Any]:
+    if str(config.get("leverage_policy", "fixed_1x")) == "risk_bounded_dynamic":
+        return _open_long_dynamic(state, config, raw, event_ms, reason, signal_open_ms)
     fill = _slip(raw, "buy", config)
     equity = mark_equity(state) or _cash(state)
     stop_pct = Decimal("0.08")
@@ -289,6 +323,81 @@ def _open_long(state: dict[str, Any], config: dict[str, Any], raw: Decimal, even
         "raw_price": _d(raw),
         "fill_price": _d(fill),
         "fee": _d(fee),
+        "ts_ms": event_ms,
+        "signal_bar_open_ms": signal_open_ms,
+        "orders_sent": 0,
+    }
+
+
+def _open_long_dynamic(state: dict[str, Any], config: dict[str, Any], raw: Decimal, event_ms: int, reason: str, signal_open_ms: int) -> dict[str, Any]:
+    """Opt-in planner. The default fixed-1x path does not call this."""
+    from leverage_policy import MaintenanceModel, plan_leverage
+
+    fill = _slip(raw, "buy", config)
+    equity = mark_equity(state) or _cash(state)
+    model = MaintenanceModel(
+        rate=_dec(config.get("maintenance_rate", "0.004"), "maintenance_rate"),
+        liquidation_fee_rate=_dec(config.get("liquidation_fee_rate", "0.005"), "liquidation_fee_rate"),
+    )
+    plan = plan_leverage(
+        equity=equity,
+        cash=_cash(state),
+        price=fill,
+        side="long",
+        stop_distance=_dec(config["strategy"].get("stop_pct", "0.08"), "stop_pct"),
+        risk_fraction=_dec(config.get("risk_per_trade_pct", "0.01"), "risk_per_trade_pct"),
+        model=model,
+        fee_rate=_dec(config.get("fee_bps", "5"), "fee_bps") / BPS,
+        slippage_rate=_dec(config.get("slippage_bps", "2"), "slippage_bps") / BPS,
+        extra_buffer=_dec(config.get("extra_buffer", "0.001"), "extra_buffer"),
+        max_leverage=int(config.get("max_contract_leverage", 50)),
+    )
+    if not plan.accepted or plan.qty <= 0:
+        return {
+            "type": "rejected",
+            "reason": plan.reason,
+            "contract_leverage": plan.contract_leverage,
+            "liquidation_distance": _d(plan.liquidation_distance),
+            "required_buffer": _d(plan.required_buffer),
+            "ts_ms": event_ms,
+            "orders_sent": 0,
+        }
+    fee = plan.notional * _dec(config.get("fee_bps", "5"), "fee_bps") / BPS
+    state["cash"] = _d(_cash(state) - plan.initial_margin - fee)
+    state["fees"] = _d(Decimal(state["fees"]) + fee)
+    stop = fill * (Decimal("1") - plan.stop_distance)
+    state["position"] = {
+        "side": "long",
+        "qty": _d(plan.qty),
+        "entry": _d(fill),
+        "stop": _d(stop),
+        "margin": _d(plan.initial_margin),
+        "entry_ms": event_ms,
+        "signal_bar_open_ms": signal_open_ms,
+        "contract_leverage": plan.contract_leverage,
+        "effective_leverage": _d(plan.effective_leverage),
+        "liquidation_distance": _d(plan.liquidation_distance),
+        "liquidation_price": _d(fill * (Decimal("1") - plan.liquidation_distance)),
+        "leverage_reason": plan.reason,
+        "leverage_locked_from_prior_state": False,
+    }
+    state["filled_signal_open_ms"].append(signal_open_ms)
+    state["pending"] = None
+    return {
+        "type": "fill",
+        "action": "open_long",
+        "reason": reason,
+        "qty": _d(plan.qty),
+        "raw_price": _d(raw),
+        "fill_price": _d(fill),
+        "fee": _d(fee),
+        "contract_leverage": plan.contract_leverage,
+        "effective_leverage": _d(plan.effective_leverage),
+        "initial_margin": _d(plan.initial_margin),
+        "notional": _d(plan.notional),
+        "stop_distance": _d(plan.stop_distance),
+        "liquidation_distance": _d(plan.liquidation_distance),
+        "leverage_reason": plan.reason,
         "ts_ms": event_ms,
         "signal_bar_open_ms": signal_open_ms,
         "orders_sent": 0,

@@ -14,6 +14,11 @@ PACKAGE_FILES = (
     "research_data.py",
     "research_calendar.py",
     "paper_forward.example.json",
+    "paper_forward.dynamic.example.json",
+    "leverage_policy.py",
+    "strategy_candidates.py",
+    "research_leverage_study.py",
+    "leverage_study.example.json",
     "requirements-paper.txt",
     "packaging/README-PAPER.md",
 )

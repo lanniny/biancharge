@@ -1,0 +1,506 @@
+{
+  "study": "risk_bounded_leverage",
+  "paper_only": true,
+  "orders_sent": 0,
+  "parameters_locked": true,
+  "optimized_on_reused_holdout": false,
+  "holdout_label": "reused_2024_2026_previously_inspected",
+  "maintenance_model": {
+    "rate": "0.004",
+    "liquidation_fee_rate": "0.005",
+    "source": "approximate_first_bracket_not_exchange_exact",
+    "exchange_schedule_verified": false,
+    "fapi_leverage_bracket": "http_451_not_used"
+  },
+  "provenance": {
+    "daily_trade_bars": 2496,
+    "four_hour_trade_bars": 14976,
+    "funding_events": 7488,
+    "missing_daily_months": [],
+    "missing_daily_mark_months": [],
+    "missing_4h_months": [],
+    "missing_4h_mark_months": [],
+    "missing_funding_months": 0,
+    "sample_start": "2020-01-01",
+    "sample_end": "2026-10-31"
+  },
+  "tracks": {
+    "baseline_fixed_1x_daily": {
+      "starting_equity": "10000",
+      "ending_equity": "12022.01087670672947204299077",
+      "net_pnl": "2022.01087670672947204299077",
+      "net_return": "0.202201087670672947204299077",
+      "fees": "125.7851063573139306643967940",
+      "funding_pnl": "-873.2537567269449660283371731",
+      "funding_missing_events": 6,
+      "funding_status": "incomplete",
+      "net_pnl_includes_complete_funding": false,
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 86
+      },
+      "mean_effective_leverage_on_entry": "0.12500781298831176948559285",
+      "max_drawdown": "0.08946887368131574322800984758",
+      "fills": 86,
+      "segments": {
+        "before_reused_holdout": {
+          "label": "before_reused_holdout",
+          "start": "2020-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "1870.54676118365570880874413",
+          "return_on_segment_start": "0.187054676118365570880874413",
+          "max_drawdown": "0.08946887368131574322800984758",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "reused_holdout": {
+          "label": "reused_holdout",
+          "start": "2024-01-01",
+          "end": "2026-11-01",
+          "net_pnl": "86.18704301844038778244995",
+          "return_on_segment_start": "0.007220870902533061972462331320",
+          "max_drawdown": "0.06691818852240077539093290450",
+          "selection_bias": "reused_holdout"
+        },
+        "2021": {
+          "label": "walk_forward_2021_frozen_params",
+          "start": "2021-01-01",
+          "end": "2022-01-01",
+          "net_pnl": "351.98752355366958447949518",
+          "return_on_segment_start": "0.03077909894771708698814998167",
+          "max_drawdown": "0.06254484439898714272337196374",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2022": {
+          "label": "walk_forward_2022_frozen_params",
+          "start": "2022-01-01",
+          "end": "2023-01-01",
+          "net_pnl": "-694.44995228325993259090030",
+          "return_on_segment_start": "-0.05891202898785184765700373722",
+          "max_drawdown": "0.05891202898785184765700373722",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2023": {
+          "label": "walk_forward_2023_frozen_params",
+          "start": "2023-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "777.08235685120118347016495",
+          "return_on_segment_start": "0.07004866365710954403161925128",
+          "max_drawdown": "0.02933463195855491743001018992",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2024": {
+          "label": "walk_forward_2024_frozen_params",
+          "start": "2024-01-01",
+          "end": "2025-01-01",
+          "net_pnl": "205.92067593375141396635141",
+          "return_on_segment_start": "0.01725232198489309163264703389",
+          "max_drawdown": "0.06691818852240077539093290450",
+          "selection_bias": "reused_holdout"
+        },
+        "2025": {
+          "label": "walk_forward_2025_frozen_params",
+          "start": "2025-01-01",
+          "end": "2026-01-01",
+          "net_pnl": "-167.05999098400326267404233",
+          "return_on_segment_start": "-0.01375914234166369073584820555",
+          "max_drawdown": "0.02890012270111573203279321085",
+          "selection_bias": "reused_holdout"
+        },
+        "2026": {
+          "label": "walk_forward_2026_frozen_params",
+          "start": "2026-01-01",
+          "end": "2027-01-01",
+          "net_pnl": "47.32635806869223649014087",
+          "return_on_segment_start": "0.003952200827924190428307902994",
+          "max_drawdown": "0.03168597070927354227810829538",
+          "selection_bias": "reused_holdout"
+        }
+      },
+      "name": "baseline_fixed_1x_daily"
+    },
+    "baseline_dynamic_daily": {
+      "starting_equity": "10000",
+      "ending_equity": "12022.01087670672947204299077",
+      "net_pnl": "2022.01087670672947204299077",
+      "net_return": "0.202201087670672947204299077",
+      "fees": "125.7851063573139306643967941",
+      "funding_pnl": "-873.2537567269449660283371729",
+      "funding_missing_events": 6,
+      "funding_status": "incomplete",
+      "net_pnl_includes_complete_funding": false,
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 86
+      },
+      "mean_effective_leverage_on_entry": "0.12500781298831176948559285",
+      "max_drawdown": "0.08946887368131574322800984758",
+      "fills": 86,
+      "segments": {
+        "before_reused_holdout": {
+          "label": "before_reused_holdout",
+          "start": "2020-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "1870.54676118365570880874413",
+          "return_on_segment_start": "0.187054676118365570880874413",
+          "max_drawdown": "0.08946887368131574322800984758",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "reused_holdout": {
+          "label": "reused_holdout",
+          "start": "2024-01-01",
+          "end": "2026-11-01",
+          "net_pnl": "86.18704301844038778244995",
+          "return_on_segment_start": "0.007220870902533061972462331320",
+          "max_drawdown": "0.06691818852240077539093290450",
+          "selection_bias": "reused_holdout"
+        },
+        "2021": {
+          "label": "walk_forward_2021_frozen_params",
+          "start": "2021-01-01",
+          "end": "2022-01-01",
+          "net_pnl": "351.98752355366958447949518",
+          "return_on_segment_start": "0.03077909894771708698814998167",
+          "max_drawdown": "0.06254484439898714272337196374",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2022": {
+          "label": "walk_forward_2022_frozen_params",
+          "start": "2022-01-01",
+          "end": "2023-01-01",
+          "net_pnl": "-694.44995228325993259090030",
+          "return_on_segment_start": "-0.05891202898785184765700373722",
+          "max_drawdown": "0.05891202898785184765700373722",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2023": {
+          "label": "walk_forward_2023_frozen_params",
+          "start": "2023-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "777.08235685120118347016495",
+          "return_on_segment_start": "0.07004866365710954403161925128",
+          "max_drawdown": "0.02933463195855491743001018992",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2024": {
+          "label": "walk_forward_2024_frozen_params",
+          "start": "2024-01-01",
+          "end": "2025-01-01",
+          "net_pnl": "205.92067593375141396635141",
+          "return_on_segment_start": "0.01725232198489309163264703389",
+          "max_drawdown": "0.06691818852240077539093290450",
+          "selection_bias": "reused_holdout"
+        },
+        "2025": {
+          "label": "walk_forward_2025_frozen_params",
+          "start": "2025-01-01",
+          "end": "2026-01-01",
+          "net_pnl": "-167.05999098400326267404233",
+          "return_on_segment_start": "-0.01375914234166369073584820555",
+          "max_drawdown": "0.02890012270111573203279321085",
+          "selection_bias": "reused_holdout"
+        },
+        "2026": {
+          "label": "walk_forward_2026_frozen_params",
+          "start": "2026-01-01",
+          "end": "2027-01-01",
+          "net_pnl": "47.32635806869223649014087",
+          "return_on_segment_start": "0.003952200827924190428307902994",
+          "max_drawdown": "0.03168597070927354227810829538",
+          "selection_bias": "reused_holdout"
+        }
+      },
+      "name": "baseline_dynamic_daily"
+    },
+    "atr_breakout_4h_dynamic": {
+      "starting_equity": "10000",
+      "ending_equity": "19190.21509742389484665512398",
+      "net_pnl": "9190.21509742389484665512398",
+      "net_return": "0.919021509742389484665512398",
+      "fees": "754.0348830630525307241766462",
+      "funding_pnl": "-934.6945672356955971263572785",
+      "funding_missing_events": 5,
+      "funding_status": "incomplete",
+      "net_pnl_includes_complete_funding": false,
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 158
+      },
+      "mean_effective_leverage_on_entry": "0.3135670950092312350217857826",
+      "max_drawdown": "0.1006319534732661687805364562",
+      "fills": 158,
+      "segments": {
+        "before_reused_holdout": {
+          "label": "before_reused_holdout",
+          "start": "2020-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "6100.12796344213704124474295",
+          "return_on_segment_start": "0.610012796344213704124474295",
+          "max_drawdown": "0.07159588818235387043627685034",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "reused_holdout": {
+          "label": "reused_holdout",
+          "start": "2024-01-01",
+          "end": "2026-11-01",
+          "net_pnl": "3090.08713398175780541038103",
+          "return_on_segment_start": "0.1919293524249176633330593364",
+          "max_drawdown": "0.1006319534732661687805364562",
+          "selection_bias": "reused_holdout"
+        },
+        "2021": {
+          "label": "walk_forward_2021_frozen_params",
+          "start": "2021-01-01",
+          "end": "2022-01-01",
+          "net_pnl": "-161.52683500878123722916558",
+          "return_on_segment_start": "-0.01417622241147424470085758978",
+          "max_drawdown": "0.05501367892492962241684144234",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2022": {
+          "label": "walk_forward_2022_frozen_params",
+          "start": "2022-01-01",
+          "end": "2023-01-01",
+          "net_pnl": "-373.18013201049494910877172",
+          "return_on_segment_start": "-0.03322271034993121760680518299",
+          "max_drawdown": "0.03379892607872917090245532500",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2023": {
+          "label": "walk_forward_2023_frozen_params",
+          "start": "2023-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "5240.62635215628591601610373",
+          "return_on_segment_start": "0.4825844260393966817392026231",
+          "max_drawdown": "0.04802645538103262467976798830",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2024": {
+          "label": "walk_forward_2024_frozen_params",
+          "start": "2024-01-01",
+          "end": "2025-01-01",
+          "net_pnl": "1960.91740014738799648402899",
+          "return_on_segment_start": "0.1217951437777363118946884231",
+          "max_drawdown": "0.1006319534732661687805364562",
+          "selection_bias": "reused_holdout"
+        },
+        "2025": {
+          "label": "walk_forward_2025_frozen_params",
+          "start": "2025-01-01",
+          "end": "2026-01-01",
+          "net_pnl": "113.73255544646679819160382",
+          "return_on_segment_start": "0.006297119195312354343949649838",
+          "max_drawdown": "0.05267320124547933708523309267",
+          "selection_bias": "reused_holdout"
+        },
+        "2026": {
+          "label": "walk_forward_2026_frozen_params",
+          "start": "2026-01-01",
+          "end": "2027-01-01",
+          "net_pnl": "1015.43717838790301073474822",
+          "return_on_segment_start": "0.05587067874564504176226104776",
+          "max_drawdown": "0.05407293511145465149292244866",
+          "selection_bias": "reused_holdout"
+        }
+      },
+      "name": "atr_breakout_4h_dynamic"
+    },
+    "baseline_fixed_1x_daily_cost_stress": {
+      "starting_equity": "10000",
+      "ending_equity": "11844.09657153216761702668981",
+      "net_pnl": "1844.09657153216761702668981",
+      "net_return": "0.184409657153216761702668981",
+      "fees": "249.6401156074927483427753535",
+      "funding_pnl": "-869.4221580606316734363437099",
+      "funding_missing_events": 6,
+      "funding_status": "incomplete",
+      "net_pnl_includes_complete_funding": false,
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 86
+      },
+      "mean_effective_leverage_on_entry": "0.1250156269533691711463932991",
+      "max_drawdown": "0.09227390936211485264502903115",
+      "fills": 86,
+      "segments": {
+        "before_reused_holdout": {
+          "label": "before_reused_holdout",
+          "start": "2020-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "1785.67507119898137300448611",
+          "return_on_segment_start": "0.178567507119898137300448611",
+          "max_drawdown": "0.09227390936211485264502903115",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "reused_holdout": {
+          "label": "reused_holdout",
+          "start": "2024-01-01",
+          "end": "2026-11-01",
+          "net_pnl": "-5.34462314734262076741269",
+          "return_on_segment_start": "-0.0004510443201104198445122710420",
+          "max_drawdown": "0.06836974508841843728152372536",
+          "selection_bias": "reused_holdout"
+        },
+        "2021": {
+          "label": "walk_forward_2021_frozen_params",
+          "start": "2021-01-01",
+          "end": "2022-01-01",
+          "net_pnl": "327.12029907717857102588383",
+          "return_on_segment_start": "0.02866341945366007019807673809",
+          "max_drawdown": "0.06253865540903613116292551574",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2022": {
+          "label": "walk_forward_2022_frozen_params",
+          "start": "2022-01-01",
+          "end": "2023-01-01",
+          "net_pnl": "-707.49255458227023239329996",
+          "return_on_segment_start": "-0.06026554415219610815484443525",
+          "max_drawdown": "0.06026554415219610815484443525",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2023": {
+          "label": "walk_forward_2023_frozen_params",
+          "start": "2023-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "753.58135745600607196089706",
+          "return_on_segment_start": "0.06830809971431348019876447027",
+          "max_drawdown": "0.03052624909183040966958701144",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2024": {
+          "label": "walk_forward_2024_frozen_params",
+          "start": "2024-01-01",
+          "end": "2025-01-01",
+          "net_pnl": "172.60585354081647752287081",
+          "return_on_segment_start": "0.01456658172355991153856325784",
+          "max_drawdown": "0.06836974508841843728152372536",
+          "selection_bias": "reused_holdout"
+        },
+        "2025": {
+          "label": "walk_forward_2025_frozen_params",
+          "start": "2025-01-01",
+          "end": "2026-01-01",
+          "net_pnl": "-195.85806631704031131004018",
+          "return_on_segment_start": "-0.01629157376705109384085332047",
+          "max_drawdown": "0.02984138998586957522143000318",
+          "selection_bias": "reused_holdout"
+        },
+        "2026": {
+          "label": "walk_forward_2026_frozen_params",
+          "start": "2026-01-01",
+          "end": "2027-01-01",
+          "net_pnl": "17.90758962888121301975668",
+          "return_on_segment_start": "0.001514231647767833700898896578",
+          "max_drawdown": "0.03266290012706402240847867724",
+          "selection_bias": "reused_holdout"
+        }
+      },
+      "name": "baseline_fixed_1x_daily_cost_stress"
+    },
+    "atr_breakout_4h_dynamic_cost_stress": {
+      "starting_equity": "10000",
+      "ending_equity": "17601.53915447049063551450996",
+      "net_pnl": "7601.53915447049063551450996",
+      "net_return": "0.760153915447049063551450996",
+      "fees": "1432.570579569103190286799814",
+      "funding_pnl": "-903.2927943102804924146344562",
+      "funding_missing_events": 5,
+      "funding_status": "incomplete",
+      "net_pnl_includes_complete_funding": false,
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {
+        "1": 158
+      },
+      "mean_effective_leverage_on_entry": "0.3136257793596027132912157799",
+      "max_drawdown": "0.1060988109962397422221097807",
+      "fills": 158,
+      "segments": {
+        "before_reused_holdout": {
+          "label": "before_reused_holdout",
+          "start": "2020-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "5293.94554774672401139758522",
+          "return_on_segment_start": "0.529394554774672401139758522",
+          "max_drawdown": "0.08141452053578332895505557073",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "reused_holdout": {
+          "label": "reused_holdout",
+          "start": "2024-01-01",
+          "end": "2026-11-01",
+          "net_pnl": "2307.59360672376662411692474",
+          "return_on_segment_start": "0.1508828182707729893558512923",
+          "max_drawdown": "0.1060988109962397422221097807",
+          "selection_bias": "reused_holdout"
+        },
+        "2021": {
+          "label": "walk_forward_2021_frozen_params",
+          "start": "2021-01-01",
+          "end": "2022-01-01",
+          "net_pnl": "-246.00324706908809380026611",
+          "return_on_segment_start": "-0.02180559393182341218285560151",
+          "max_drawdown": "0.06041634132115751701535902499",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2022": {
+          "label": "walk_forward_2022_frozen_params",
+          "start": "2022-01-01",
+          "end": "2023-01-01",
+          "net_pnl": "-401.48702875423725955190726",
+          "return_on_segment_start": "-0.03638089882428018322216463129",
+          "max_drawdown": "0.03642825337185269681090077771",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2023": {
+          "label": "walk_forward_2023_frozen_params",
+          "start": "2023-01-01",
+          "end": "2024-01-01",
+          "net_pnl": "4659.77810591131363339606318",
+          "return_on_segment_start": "0.4381892735278443662754768526",
+          "max_drawdown": "0.05393779236747909023051080323",
+          "selection_bias": "not_the_previously_published_holdout"
+        },
+        "2024": {
+          "label": "walk_forward_2024_frozen_params",
+          "start": "2024-01-01",
+          "end": "2025-01-01",
+          "net_pnl": "1658.21708768080852126526650",
+          "return_on_segment_start": "0.1084231065491870869033027900",
+          "max_drawdown": "0.1060988109962397422221097807",
+          "selection_bias": "reused_holdout"
+        },
+        "2025": {
+          "label": "walk_forward_2025_frozen_params",
+          "start": "2025-01-01",
+          "end": "2026-01-01",
+          "net_pnl": "-108.25472374461524244094121",
+          "return_on_segment_start": "-0.006385894594851205233938369353",
+          "max_drawdown": "0.06101457339926073062211723281",
+          "selection_bias": "reused_holdout"
+        },
+        "2026": {
+          "label": "walk_forward_2026_frozen_params",
+          "start": "2026-01-01",
+          "end": "2027-01-01",
+          "net_pnl": "757.63124278757334529259945",
+          "return_on_segment_start": "0.04497954077878097936061130139",
+          "max_drawdown": "0.06002119856737843526887287156",
+          "selection_bias": "reused_holdout"
+        }
+      },
+      "name": "atr_breakout_4h_dynamic_cost_stress"
+    }
+  },
+  "limitations": [
+    "2024-01-01 之后的区间已经在日线均线研究里看过，这里标成 reused_holdout，不能再当作从未见过的样本外。",
+    "维持保证金和强平费是近似值。杠杆档位接口返回 HTTP 451，没有用代理去取，也不声称与交易所逐档表一致。",
+    "8% 止损在 50 倍下会落在估算强平价之外，规划器不会为了用满 50 倍而放大仓位。",
+    "4 小时标记价的高低点用来判断止损和强平谁先碰到。这仍是一根 K 线内从开盘向不利极值移动的假设，不是逐笔路径。",
+    "更高杠杆不能弥补信号本身弱。前向纸面才是这次比较之后还没走过的验证。"
+  ]
+}
