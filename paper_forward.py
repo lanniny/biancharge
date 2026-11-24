@@ -19,13 +19,13 @@ import os
 import signal
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable
 
 from paper_ws import PaperFeedError, PublicUmSocket
-from research_backtest import StrategySpec, apply_slippage, desired_side
+from research_backtest import ResearchSafetyError, StrategySpec, apply_slippage, desired_side
 from research_data import fetch_vision_zip, parse_vision_kline_csv, zip_csv_text
 
 EIGHT_HOURS_MS = 8 * 60 * 60 * 1000
@@ -662,56 +662,69 @@ def cmd_preflight(config: dict[str, Any]) -> int:
     return 0 if report["ok"] else 2
 
 
-def load_warmup_bars(now: datetime | None = None, cache_root: Path | None = None) -> list[dict[str, Any]]:
-    """Completed daily trade klines from the public archive. No FAPI and no fills."""
+def _bars_from_kline_zip(payload: bytes, today: date) -> list[dict[str, Any]]:
+    parsed: list[dict[str, Any]] = []
+    for row in parse_vision_kline_csv(zip_csv_text(payload)):
+        open_time = row["timestamp"]
+        if not isinstance(open_time, datetime) or open_time.date() >= today:
+            continue
+        open_ms = int(open_time.timestamp() * 1000)
+        parsed.append(
+            {
+                "open_ms": open_ms,
+                "close_ms": open_ms + 86_400_000 - 1,
+                "close": row["close"],
+            }
+        )
+    return parsed
+
+
+def load_warmup_bars(
+    now: datetime | None = None,
+    cache_root: Path | None = None,
+    fetcher: Callable[..., Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Completed daily trade klines from the public archive. No FAPI and no fills.
+
+    The current UTC month often has no monthly file yet, so that 404 is skipped
+    and each completed day is requested from the daily archive. A missing or
+    unreadable day does not abort startup. Bars that open today are incomplete
+    and are left out.
+    """
     now = now or datetime.now(timezone.utc)
-    today = now.date()
+    if now.tzinfo is None:
+        raise PaperForwardError("warmup clock must be timezone-aware")
+    today = now.astimezone(timezone.utc).date()
     months: list[date] = []
     cursor = date(today.year, today.month, 1)
     for _ in range(4):
         months.append(cursor)
-        cursor = date(cursor.year - 1, 12, 1) if cursor.month == 1 else date(cursor.year, cursor.month - 1, 1)
+        if cursor.month == 1:
+            cursor = date(cursor.year - 1, 12, 1)
+        else:
+            cursor = date(cursor.year, cursor.month - 1, 1)
     bars: list[dict[str, Any]] = []
     cache = cache_root or Path("data/research-cache")
+    read = fetcher or fetch_vision_zip
     for month in reversed(months):
         stamp = f"{month.year:04d}-{month.month:02d}"
         url = f"https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-{stamp}.zip"
         try:
-            payload, _meta = fetch_vision_zip(url, cache)
-        except Exception:
+            payload, _meta = read(url, cache)
+            bars.extend(_bars_from_kline_zip(payload, today))
+        except (ResearchSafetyError, OSError, ValueError):
             continue
-        for row in parse_vision_kline_csv(zip_csv_text(payload)):
-            open_time = row["timestamp"]
-            if not isinstance(open_time, datetime) or open_time.date() >= today:
-                continue
-            bars.append(
-                {
-                    "open_ms": int(open_time.timestamp() * 1000),
-                    "close_ms": int(open_time.timestamp() * 1000) + 86_400_000 - 1,
-                    "close": row["close"],
-                }
-            )
-    day = today.replace(day=1)
+    day = date(today.year, today.month, 1)
     while day < today:
         url = (
             "https://data.binance.vision/data/futures/um/daily/klines/BTCUSDT/1d/"
             f"BTCUSDT-1d-{day.isoformat()}.zip"
         )
         try:
-            payload, _meta = fetch_vision_zip(url, cache)
-        except Exception:
-            day += timedelta(days=1)
-            continue
-        for row in parse_vision_kline_csv(zip_csv_text(payload)):
-            open_time = row["timestamp"]
-            if isinstance(open_time, datetime) and open_time.date() < today:
-                bars.append(
-                    {
-                        "open_ms": int(open_time.timestamp() * 1000),
-                        "close_ms": int(open_time.timestamp() * 1000) + 86_400_000 - 1,
-                        "close": row["close"],
-                    }
-                )
+            payload, _meta = read(url, cache)
+            bars.extend(_bars_from_kline_zip(payload, today))
+        except (ResearchSafetyError, OSError, ValueError):
+            pass
         day += timedelta(days=1)
     deduped: dict[int, dict[str, Any]] = {}
     for bar in bars:
@@ -720,7 +733,12 @@ def load_warmup_bars(now: datetime | None = None, cache_root: Path | None = None
     return ordered[-120:]
 
 
-def cmd_start(config: dict[str, Any], *, feed_factory: Callable[[str], PublicUmSocket] | None = None) -> int:
+def cmd_start(
+    config: dict[str, Any],
+    *,
+    feed_factory: Callable[[str], Any] | None = None,
+    warmup_loader: Callable[[], list[dict[str, Any]]] | None = None,
+) -> int:
     check = preflight(config, timeout=20.0) if feed_factory is None else {"ok": True, "streams": {"injected": True}}
     if not check.get("ok"):
         print(json.dumps({"started": False, "blocker": check.get("blocker"), "orders_sent": 0}, ensure_ascii=False), file=sys.stderr)
@@ -730,7 +748,7 @@ def cmd_start(config: dict[str, Any], *, feed_factory: Callable[[str], PublicUmS
         stop_path.unlink()
     state = load_state(state_path, config)
     if not state["closed_bars"]:
-        for bar in load_warmup_bars():
+        for bar in (warmup_loader or load_warmup_bars)():
             on_closed_bar(state, config, bar, live=False)
             state["warmup_bar_open_ms"].append(int(bar["open_ms"]))
         append_log(
@@ -753,6 +771,8 @@ def cmd_start(config: dict[str, Any], *, feed_factory: Callable[[str], PublicUmS
     def _handle(_signum: int, _frame: Any) -> None:
         stopping["flag"] = True
 
+    previous_term = signal.getsignal(signal.SIGTERM)
+    previous_int = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGTERM, _handle)
     signal.signal(signal.SIGINT, _handle)
     import queue
@@ -813,6 +833,10 @@ def cmd_start(config: dict[str, Any], *, feed_factory: Callable[[str], PublicUmS
         append_log(log_path, {"type": "stopped", "orders_sent": 0, "ts": _iso(state["heartbeat_ms"])})
         mark_sock.close()
         book_sock.close()
+        for thread in threads:
+            thread.join(timeout=2)
+        signal.signal(signal.SIGTERM, previous_term)
+        signal.signal(signal.SIGINT, previous_int)
     print(json.dumps({"stopped": True, "orders_sent": 0, "state": str(state_path)}, ensure_ascii=False))
     return 0
 

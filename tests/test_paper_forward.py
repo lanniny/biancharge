@@ -5,15 +5,24 @@ These tests do not claim a real-time paper session is running.
 
 from __future__ import annotations
 
+import importlib.util
+import io
 import json
+import tarfile
+import tempfile
+import threading
 import unittest
+import zipfile
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
 from paper_forward import (
     PaperForwardError,
     apply_feed_event,
+    cmd_start,
     load_paper_config,
+    load_warmup_bars,
     new_state,
     on_book,
     on_closed_bar,
@@ -21,6 +30,7 @@ from paper_forward import (
     on_next_open,
     status_report,
 )
+from research_backtest import ResearchSafetyError
 from paper_ws import build_client_frame, parse_server_frames
 
 
@@ -222,6 +232,198 @@ class ForwardAccountingTests(unittest.TestCase):
         report = status_report(state, _config(), now_ms=10_000_000)
         self.assertEqual(report["process"], "not_running")
         self.assertEqual(report["orders_sent"], 0)
+
+
+def _kline_zip(open_ms: int, close: str) -> bytes:
+    text = f"{open_ms},{close},{close},{close},{close},1,0,0,0,0,0,0\n"
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("BTCUSDT-1d.csv", text)
+    return buffer.getvalue()
+
+
+def _ms(year: int, month: int, day: int) -> int:
+    return int(datetime(year, month, day, tzinfo=timezone.utc).timestamp() * 1000)
+
+
+class WarmupStartupTests(unittest.TestCase):
+    def test_month_and_daily_fallback_skips_missing_days_and_today(self) -> None:
+        calls: list[str] = []
+
+        def fetcher(url: str, _cache: Path) -> tuple[bytes, dict]:
+            calls.append(url)
+            self.assertNotIn("fapi.binance.com", url)
+            if "/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-11.zip" in url:
+                raise ResearchSafetyError("HTTP 404")
+            if "/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-08.zip" in url:
+                return _kline_zip(_ms(2026, 8, 15), "100"), {}
+            if "/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-09.zip" in url:
+                return _kline_zip(_ms(2026, 9, 15), "110"), {}
+            if "/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-2026-10.zip" in url:
+                return _kline_zip(_ms(2026, 10, 15), "120"), {}
+            if url.endswith("BTCUSDT-1d-2026-11-01.zip"):
+                return _kline_zip(_ms(2026, 11, 1), "130"), {}
+            if url.endswith("BTCUSDT-1d-2026-11-02.zip"):
+                raise ResearchSafetyError("HTTP 404")
+            if url.endswith("BTCUSDT-1d-2026-11-03.zip"):
+                return _kline_zip(_ms(2026, 11, 3), "131"), {}
+            if url.endswith("BTCUSDT-1d-2026-11-04.zip"):
+                return _kline_zip(_ms(2026, 11, 24), "999"), {}
+            raise ResearchSafetyError("HTTP 404")
+
+        bars = load_warmup_bars(
+            now=datetime(2026, 11, 24, 13, 5, tzinfo=timezone.utc),
+            cache_root=Path(tempfile.mkdtemp()),
+            fetcher=fetcher,
+        )
+        monthly = [url for url in calls if "/monthly/" in url]
+        self.assertEqual(
+            [url.rsplit("BTCUSDT-1d-", 1)[1][:7] for url in monthly],
+            ["2026-08", "2026-09", "2026-10", "2026-11"],
+        )
+        daily = [url for url in calls if "/daily/" in url]
+        self.assertTrue(daily[0].endswith("2026-11-01.zip"))
+        self.assertTrue(daily[-1].endswith("2026-11-23.zip"))
+        self.assertFalse(any(url.endswith("2026-11-24.zip") for url in daily))
+        opens = {bar["open_ms"] for bar in bars}
+        self.assertIn(_ms(2026, 8, 15), opens)
+        self.assertIn(_ms(2026, 11, 1), opens)
+        self.assertIn(_ms(2026, 11, 3), opens)
+        self.assertNotIn(_ms(2026, 11, 2), opens)
+        self.assertNotIn(_ms(2026, 11, 24), opens)
+        self.assertEqual(opens, set(sorted(opens)))
+
+    def test_january_walks_into_the_previous_year(self) -> None:
+        calls: list[str] = []
+
+        def fetcher(url: str, _cache: Path) -> tuple[bytes, dict]:
+            calls.append(url)
+            raise ResearchSafetyError("HTTP 404")
+
+        load_warmup_bars(now=datetime(2026, 1, 10, tzinfo=timezone.utc), cache_root=Path(tempfile.mkdtemp()), fetcher=fetcher)
+        monthly = [url for url in calls if "/monthly/" in url]
+        self.assertEqual(
+            [url.rsplit("BTCUSDT-1d-", 1)[1][:7] for url in monthly],
+            ["2025-10", "2025-11", "2025-12", "2026-01"],
+        )
+        self.assertTrue(any(url.endswith("2026-01-09.zip") for url in calls))
+        self.assertFalse(any(url.endswith("2026-01-10.zip") for url in calls))
+
+    def test_start_after_warmup_heartbeats_without_forward_fills(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = json.loads(CONFIG.read_text(encoding="utf-8"))
+            config["state_path"] = str(root / "state.json")
+            config["log_path"] = str(root / "log.jsonl")
+            config["stop_path"] = str(root / "STOP")
+            config["heartbeat_seconds"] = 30
+            path = root / "paper.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = load_paper_config(path)
+
+            class Socket:
+                def connect(self) -> str:
+                    return "HTTP/1.1 101 Switching Protocols"
+
+                def read_text(self, timeout: float) -> None:
+                    import time
+
+                    time.sleep(min(timeout, 0.05))
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+            threading.Timer(1.5, lambda: Path(config["stop_path"]).write_text("stop\n", encoding="utf-8")).start()
+            code = cmd_start(loaded, feed_factory=lambda _url: Socket(), warmup_loader=lambda: _rising_bars(60, 1_700_000_000_000))
+            self.assertEqual(code, 0)
+            state = json.loads(Path(config["state_path"]).read_text(encoding="utf-8"))
+            log = Path(config["log_path"]).read_text(encoding="utf-8")
+            self.assertEqual(state["orders_sent"], 0)
+            self.assertIsNone(state["position"])
+            self.assertGreaterEqual(len(state["closed_bars"]), 50)
+            self.assertFalse(state["running"])
+            self.assertIn('"type": "warmup"', log)
+            self.assertIn('"forward_trades": 0', log)
+            self.assertIn('"type": "heartbeat"', log)
+            self.assertNotIn('"type": "fill"', log)
+            report = status_report(state, loaded, now_ms=state["heartbeat_ms"] + 120_000)
+            self.assertEqual(report["process"], "not_running")
+
+
+class ExtractedArchiveTests(unittest.TestCase):
+    def test_extracted_package_can_warm_up_and_start(self) -> None:
+        spec_builder = importlib.util.spec_from_file_location(
+            "package_paper_forward",
+            ROOT / "packaging" / "package_paper_forward.py",
+        )
+        assert spec_builder is not None and spec_builder.loader is not None
+        builder = importlib.util.module_from_spec(spec_builder)
+        spec_builder.loader.exec_module(builder)
+        build_archive = builder.build_archive
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = build_archive(root / "paper-forward-btcusdt.tar.gz")
+            with tarfile.open(archive, "r:gz") as packed:
+                packed.extractall(root / "extract")
+            package = root / "extract" / "paper-forward-btcusdt"
+            spec = importlib.util.spec_from_file_location("paper_forward_extracted", package / "paper_forward.py")
+            assert spec is not None and spec.loader is not None
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.assertEqual(Path(module.__file__).resolve(), (package / "paper_forward.py").resolve())
+            calls: list[str] = []
+
+            def fetcher(url: str, _cache: Path) -> tuple[bytes, dict]:
+                calls.append(url)
+                if url.endswith("BTCUSDT-1d-2026-11.zip") and "/monthly/" in url:
+                    raise module.ResearchSafetyError("HTTP 404")
+                if "/monthly/" in url and "2026-10" in url:
+                    return _kline_zip(_ms(2026, 10, 2), "100"), {}
+                if url.endswith("2026-11-01.zip"):
+                    return _kline_zip(_ms(2026, 11, 1), "101"), {}
+                raise module.ResearchSafetyError("HTTP 404")
+
+            bars = module.load_warmup_bars(
+                now=datetime(2026, 11, 24, tzinfo=timezone.utc),
+                cache_root=root / "cache",
+                fetcher=fetcher,
+            )
+            self.assertIn(_ms(2026, 11, 1), {bar["open_ms"] for bar in bars})
+            self.assertGreater(len(calls), 20)
+            config = json.loads((package / "paper_forward.example.json").read_text(encoding="utf-8"))
+            config["state_path"] = str(root / "state.json")
+            config["log_path"] = str(root / "log.jsonl")
+            config["stop_path"] = str(root / "STOP")
+            config_path = root / "paper.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            loaded = module.load_paper_config(config_path)
+
+            class Socket:
+                def connect(self) -> str:
+                    return "HTTP/1.1 101 Switching Protocols"
+
+                def read_text(self, timeout: float) -> None:
+                    import time
+
+                    time.sleep(min(timeout, 0.05))
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+            threading.Timer(1.5, lambda: Path(config["stop_path"]).write_text("stop\n", encoding="utf-8")).start()
+            code = module.cmd_start(
+                loaded,
+                feed_factory=lambda _url: Socket(),
+                warmup_loader=lambda: bars,
+            )
+            self.assertEqual(code, 0)
+            log = Path(config["log_path"]).read_text(encoding="utf-8")
+            self.assertIn('"type": "heartbeat"', log)
+            self.assertIn('"forward_trades": 0', log)
+            self.assertNotIn('"type": "fill"', log)
 
 
 if __name__ == "__main__":
