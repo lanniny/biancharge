@@ -152,6 +152,58 @@ python .\market_autotrader.py --config .\market_autotrader.binance-order-test.ex
 
 如果运行时看到 `HTTP 451`，说明当前网络环境无法访问 Binance 主站公开行情；脚本会继续尝试 `config.example.json` 里的下一个公开行情端点。你也可以把 `price_endpoints` 改成你能访问的行情代理或测试网端点。
 
+## 研究回测：BTC 永续与美股/ETF 现金（只做纸面）
+
+`research_backtest.py` 是单独的研究命令，用来核对 **BTCUSDT U 本位永续** 和 **美股/ETF 现金** 的回测或纸面账本。它不改 `market_autotrader.py` 的原有策略默认值，也不打开实盘闸门。`mode` 只能是 `backtest` 或 `paper`；写成 `live`、带上下单开关或凭证字段会直接退出。这条命令不读 `.env`、不连旧的 VPS、不发订单、不改交易所杠杆。
+
+`docs/DEVELOPMENT.md` 里的 VPS 运维流程和这条研究命令无关。
+
+### 产品矩阵
+
+| 产品 | `product` | 这条路径做什么 |
+| --- | --- | --- |
+| BTCUSDT U 本位永续 | `binance_usdt_perp` | 模拟逐仓保证金、手续费、滑点、止损跳空。标记价有则用于盯市/强平，没有就标明回退到成交价。指数价不进盈亏。资金费只有 CSV 提供 `funding_rate` 才入账，否则为 `unavailable`，净盈亏不含资金费。 |
+| 美股，例如 AAPL | `us_cash_equity` | 现金买入股票。杠杆拒绝为非 1。无资金费。开仓限制在 `America/New_York` 常规时段 09:30–16:00。 |
+| ETF，例如 SPY、QQQ | `us_cash_etf` | 同上，但是现金 ETF，不是期货或期权的替代品。 |
+| 美股/ETF 期权 | 不支持 | 配置该产品会失败。 |
+| CME 期货 | 不支持 | 配置该产品会失败。 |
+| Binance `AAPLUSDT` 一类代码 | 不在这里模拟 | 那是交易所合成行情，不是纳斯达克股票，也不是上市 ETF。 |
+
+现金账本和永续账本分开，起始资金不共用。信号只用已收盘 K 线，下一根开盘价成交；止损若被跳空穿过，按开盘价而不是更优的止损价成交。策略是固定参数的 `baseline_sma_momentum`，示例窗口很短，只为了让合成夹具能走出信号，**不是寻优，也不保证交易频率或收益**。
+
+### 命令
+
+在仓库根目录、不需要 API Key：
+
+```powershell
+python research_backtest.py --config research_backtest.example.json
+python research_backtest.py --config research_backtest.example.json --mode paper
+python -m unittest tests.test_research_backtest
+```
+
+示例配置 `research_backtest.example.json` 读取 `fixtures/research/` 里标明 `SYNTHETIC FIXTURE` 的玩具 K 线。纸面模式和回测用同一套账本规则，末根 K 线产生的信号如果没有下一根 K 线就保持未成交。
+
+### 输出指标
+
+终端和 `logs/research-backtest-report.json` 会给出：
+
+- 净盈亏 `net_pnl`（是否已含资金费看 `net_pnl_includes_funding` / `funding_status`）
+- 手续费 `fees`
+- 资金费 `funding`（没有序列时为 `null`）
+- 最大回撤 `max_drawdown`（按永续账本或现金账本，不是单只股票各自假装一套组合）
+- 成交笔数 `fills`，明细在 JSONL
+- 样本区间 `sample_period`，以及 `sample_split_timestamp` 两侧的 `in_sample` / `out_of_sample`
+
+这些数字只核对账本。合成夹具上的盈亏不是真实业绩。
+
+### 明确限制
+
+- 不模拟期权、CME 期货，也不把现金 ETF 说成合约适配器。
+- 示例没有真实资金费和独立标记/指数序列；报告会写明不可用，而不是把缺失记成 0。
+- 永续杠杆只存在于研究账本里的保证金占用，不会向任何账户发送调杠杆请求。
+- 旧的 Alpaca 示例 `market_autotrader.live-data.example.json` 需要本机密钥，研究命令不调用它。没有密钥时，现金股/ETF 使用自备 CSV。
+- 样本切分只用于报告，不用来挑选参数。
+
 ## 配置说明
 
 复制 `config.example.json` 后按需修改。示例里的纸上交易策略含义：
