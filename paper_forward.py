@@ -109,7 +109,10 @@ def load_paper_config(path: str | Path) -> dict[str, Any]:
     if policy not in {"fixed_1x", "risk_bounded_dynamic"}:
         raise PaperForwardError("leverage_policy must be fixed_1x or risk_bounded_dynamic")
     strategy = payload.get("strategy") or {}
+    swing = str(strategy.get("name", "")) in {"atr_breakout_4h", "tsmom_4h", "donchian_trail_4h"}
     if policy == "fixed_1x":
+        if swing:
+            raise PaperForwardError("4h long/short paper uses risk_bounded_dynamic; the fixed 1x daily config stays long-only")
         if int(payload.get("leverage", 0)) != 1:
             raise PaperForwardError("the running fixed-1x paper session cannot change leverage")
         if int(strategy.get("fast_window", 0)) != 20 or int(strategy.get("slow_window", 0)) != 50:
@@ -118,11 +121,13 @@ def load_paper_config(path: str | Path) -> dict[str, Any]:
             raise PaperForwardError("momentum window is frozen at 20")
         if Decimal(str(strategy.get("stop_pct", "0"))) != Decimal("0.08"):
             raise PaperForwardError("stop is frozen at 8%")
+    elif swing:
+        _validate_swing_config(payload)
     else:
         ceiling = int(payload.get("max_contract_leverage", 0))
         if not 1 <= ceiling <= 50:
             raise PaperForwardError("dynamic contract leverage must stay inside 1..50")
-        # The live feed remains the daily MA. The 4h breakout is an offline track.
+        # The existing dynamic daily feed remains the MA20/50 8% stop. It is not the 4h book.
         if int(strategy.get("fast_window", 0)) != 20 or int(strategy.get("slow_window", 0)) != 50:
             raise PaperForwardError("strategy windows are frozen at MA 20/50")
         if int(strategy.get("momentum_window", 0)) != 20:
@@ -137,12 +142,54 @@ def load_paper_config(path: str | Path) -> dict[str, Any]:
             raise PaperForwardError("feed URLs must stay on the public fstream.binance.com USDT-M host")
         if "fapi" in url or "order" in url or "proxy" in url:
             raise PaperForwardError("feed URL must not be an order, FAPI, or proxy endpoint")
-    if "/market/" not in mark_url or "kline_1d" not in mark_url or "markPrice" not in mark_url:
-        raise PaperForwardError("mark/kline feed must be the public USD-M daily kline and markPrice stream")
+    kline_token = "kline_4h" if swing else "kline_1d"
+    if "/market/" not in mark_url or kline_token not in mark_url or "markPrice" not in mark_url:
+        raise PaperForwardError("mark/kline feed must be the public USD-M kline and markPrice stream for this config")
     if "bookTicker" not in book_url:
         raise PaperForwardError("quote feed must be the public USD-M bookTicker stream")
     payload["_path"] = str(path)
     return payload
+
+
+def _validate_swing_config(payload: dict[str, Any]) -> None:
+    """A second paper process: long and short, own state files, frozen 4h preset."""
+    from strategy_candidates import SWING_GRIDS
+
+    strategy = payload["strategy"]
+    name = str(strategy["name"])
+    preset = strategy.get("preset")
+    if not isinstance(preset, dict) or preset.get("allow_short") is not True or preset.get("name") != name:
+        raise PaperForwardError("swing preset must set allow_short=True and the same strategy name")
+    if str(payload.get("bar_interval", "")) != "4h":
+        raise PaperForwardError("swing paper reads 4h bars")
+    ceiling = int(payload.get("max_contract_leverage", 0))
+    if not 1 <= ceiling <= 50 or str(payload.get("leverage_policy")) != "risk_bounded_dynamic":
+        raise PaperForwardError("swing paper uses the 1..50 risk-bounded planner")
+    state_name = Path(str(payload.get("state_path", ""))).name
+    if state_name in {"", "btcusdt-paper-state.json"}:
+        raise PaperForwardError("swing paper must use its own state file, not the running 1x daily state")
+    matched = False
+    for item in SWING_GRIDS[name]:
+        if set(item) != set(preset):
+            continue
+        same = True
+        for key, value in item.items():
+            raw = preset[key]
+            if isinstance(value, Decimal):
+                same = Decimal(str(raw)) == value
+            else:
+                same = raw == value
+            if not same:
+                break
+        matched = same
+        if matched:
+            break
+    if not matched:
+        raise PaperForwardError("swing preset is not one of the frozen long/short grids")
+
+
+def _is_swing(config: dict[str, Any]) -> bool:
+    return str((config.get("strategy") or {}).get("name", "")) in {"atr_breakout_4h", "tsmom_4h", "donchian_trail_4h"}
 
 
 def strategy_from(config: dict[str, Any]) -> StrategySpec:
@@ -249,7 +296,10 @@ def mark_equity(state: dict[str, Any]) -> Decimal | None:
     equity = _cash(state)
     position = _position(state)
     if position is not None:
-        equity += Decimal(position["margin"]) + (mark_price - Decimal(position["entry"])) * Decimal(position["qty"])
+        qty = Decimal(position["qty"])
+        entry = Decimal(position["entry"])
+        pnl = (entry - mark_price) * qty if position.get("side") == "short" else (mark_price - entry) * qty
+        equity += Decimal(position["margin"]) + pnl
     return equity
 
 
@@ -274,6 +324,13 @@ def entries_blocked(state: dict[str, Any], now_ms: int, config: dict[str, Any]) 
     if len(state.get("closed_bars") or []) < 50:
         return "warmup_incomplete"
     return None
+
+
+def _pending_stop(state: dict[str, Any], config: dict[str, Any]) -> Decimal:
+    pending = state.get("pending") or {}
+    if pending.get("stop_distance") not in (None, ""):
+        return _dec(pending["stop_distance"], "stop_distance")
+    return _dec(config["strategy"].get("stop_pct", "0.08"), "stop_pct")
 
 
 def _fee(notional: Decimal, config: dict[str, Any]) -> Decimal:
@@ -344,7 +401,7 @@ def _open_long_dynamic(state: dict[str, Any], config: dict[str, Any], raw: Decim
         cash=_cash(state),
         price=fill,
         side="long",
-        stop_distance=_dec(config["strategy"].get("stop_pct", "0.08"), "stop_pct"),
+        stop_distance=_pending_stop(state, config),
         risk_fraction=_dec(config.get("risk_per_trade_pct", "0.01"), "risk_per_trade_pct"),
         model=model,
         fee_rate=_dec(config.get("fee_bps", "5"), "fee_bps") / BPS,
@@ -433,33 +490,159 @@ def _close_long(state: dict[str, Any], config: dict[str, Any], raw: Decimal, eve
     }
 
 
+def _open_short(state: dict[str, Any], config: dict[str, Any], raw: Decimal, event_ms: int, reason: str, signal_open_ms: int) -> dict[str, Any]:
+    """Open a short only when a long/short strategy asked for one. The daily config never does."""
+    from leverage_policy import MaintenanceModel, plan_leverage
+
+    fill = _slip(raw, "sell", config)
+    equity = mark_equity(state) or _cash(state)
+    ceiling = 1 if str(config.get("leverage_policy", "fixed_1x")) == "fixed_1x" else int(config.get("max_contract_leverage", 50))
+    plan = plan_leverage(
+        equity=equity,
+        cash=_cash(state),
+        price=fill,
+        side="short",
+        stop_distance=_pending_stop(state, config),
+        risk_fraction=_dec(config.get("risk_per_trade_pct", "0.01"), "risk_per_trade_pct"),
+        model=MaintenanceModel(
+            rate=_dec(config.get("maintenance_rate", "0.004"), "maintenance_rate"),
+            liquidation_fee_rate=_dec(config.get("liquidation_fee_rate", "0.005"), "liquidation_fee_rate"),
+        ),
+        fee_rate=_dec(config.get("fee_bps", "5"), "fee_bps") / BPS,
+        slippage_rate=_dec(config.get("slippage_bps", "2"), "slippage_bps") / BPS,
+        extra_buffer=_dec(config.get("extra_buffer", "0.001"), "extra_buffer"),
+        max_leverage=ceiling,
+    )
+    if not plan.accepted or plan.qty <= 0:
+        return {"type": "rejected", "reason": plan.reason, "ts_ms": event_ms, "orders_sent": 0}
+    fee = plan.notional * _dec(config.get("fee_bps", "5"), "fee_bps") / BPS
+    state["cash"] = _d(_cash(state) - plan.initial_margin - fee)
+    state["fees"] = _d(Decimal(state["fees"]) + fee)
+    state["position"] = {
+        "side": "short",
+        "qty": _d(plan.qty),
+        "entry": _d(fill),
+        "stop": _d(fill * (Decimal("1") + plan.stop_distance)),
+        "margin": _d(plan.initial_margin),
+        "entry_ms": event_ms,
+        "signal_bar_open_ms": signal_open_ms,
+        "contract_leverage": plan.contract_leverage,
+        "effective_leverage": _d(plan.effective_leverage),
+        "liquidation_distance": _d(plan.liquidation_distance),
+        "liquidation_price": _d(fill * (Decimal("1") + plan.liquidation_distance)),
+        "leverage_reason": plan.reason,
+        "allow_short": True,
+    }
+    state["filled_signal_open_ms"].append(signal_open_ms)
+    state["pending"] = None
+    return {
+        "type": "fill",
+        "action": "open_short",
+        "reason": reason,
+        "qty": _d(plan.qty),
+        "raw_price": _d(raw),
+        "fill_price": _d(fill),
+        "fee": _d(fee),
+        "contract_leverage": plan.contract_leverage,
+        "effective_leverage": _d(plan.effective_leverage),
+        "stop_distance": _d(plan.stop_distance),
+        "liquidation_distance": _d(plan.liquidation_distance),
+        "ts_ms": event_ms,
+        "signal_bar_open_ms": signal_open_ms,
+        "orders_sent": 0,
+    }
+
+
+def _close_short(state: dict[str, Any], config: dict[str, Any], raw: Decimal, event_ms: int, reason: str, signal_open_ms: int | None) -> dict[str, Any]:
+    position = _position(state)
+    if position is None or position.get("side") != "short":
+        return {"type": "noop", "ts_ms": event_ms}
+    qty = Decimal(position["qty"])
+    fill = _slip(raw, "buy", config)
+    fee = _fee(fill * qty, config)
+    pnl = (Decimal(position["entry"]) - fill) * qty
+    state["cash"] = _d(_cash(state) + Decimal(position["margin"]) + pnl - fee)
+    state["fees"] = _d(Decimal(state["fees"]) + fee)
+    state["position"] = None
+    state["pending"] = None
+    if signal_open_ms is not None:
+        state["filled_signal_open_ms"].append(signal_open_ms)
+    return {
+        "type": "fill",
+        "action": "close_short",
+        "reason": reason,
+        "qty": _d(qty),
+        "raw_price": _d(raw),
+        "fill_price": _d(fill),
+        "fee": _d(fee),
+        "realized_price_pnl": _d(pnl),
+        "ts_ms": event_ms,
+        "signal_bar_open_ms": signal_open_ms,
+        "orders_sent": 0,
+    }
+
+
 def on_closed_bar(state: dict[str, Any], config: dict[str, Any], bar: dict[str, Any], *, live: bool) -> list[dict[str, Any]]:
     """Record a completed daily bar. Live bars may create a pending signal; warmup bars never do."""
     open_ms = int(bar["open_ms"])
     if open_ms in state["processed_closed_open_ms"]:
         return []
     state["processed_closed_open_ms"].append(open_ms)
-    state["closed_bars"].append({"open_ms": open_ms, "close_ms": int(bar["close_ms"]), "close": str(bar["close"])})
+    stored = {"open_ms": open_ms, "close_ms": int(bar["close_ms"]), "close": str(bar["close"])}
+    if bar.get("high") is not None and bar.get("low") is not None:
+        stored["high"] = str(bar["high"])
+        stored["low"] = str(bar["low"])
+    state["closed_bars"].append(stored)
     if not live or open_ms in state["warmup_bar_open_ms"]:
         return [{"type": "warmup_bar", "open_ms": open_ms, "counted_as_forward_trade": False}]
-    closes = [Decimal(item["close"]) for item in state["closed_bars"]]
-    side = desired_side(closes, strategy_from(config), allow_short=False)
-    current = "long" if _position(state) else "flat"
+    if _is_swing(config):
+        side, stop_distance = _swing_signal(state, config)
+    else:
+        closes = [Decimal(item["close"]) for item in state["closed_bars"]]
+        side = desired_side(closes, strategy_from(config), allow_short=False)
+        stop_distance = None
+    position = _position(state)
+    current = position.get("side") if position else "flat"
     events: list[dict[str, Any]] = [{"type": "closed_bar", "open_ms": open_ms, "close_ms": int(bar["close_ms"]), "desired": side}]
-    if side is None or side == current:
+    if side is None or side == "hold" or side == current:
         return events
-    if side == "long":
+    if side in {"long", "short"} and current == "flat":
         blocked = entries_blocked(state, int(bar["close_ms"]), config)
         if blocked:
-            events.append({"type": "rejected", "reason": blocked, "open_ms": open_ms, "desired": "long"})
+            events.append({"type": "rejected", "reason": blocked, "open_ms": open_ms, "desired": side})
             return events
-    state["pending"] = {
+    pending = {
         "signal_bar_open_ms": open_ms,
         "signal_bar_close_ms": int(bar["close_ms"]),
         "side": side,
     }
+    if stop_distance is not None:
+        pending["stop_distance"] = str(stop_distance)
+    state["pending"] = pending
     events.append({"type": "signal", "side": side, "signal_bar_open_ms": open_ms, "fill": "waiting_for_quote_or_next_open"})
     return events
+
+
+def _swing_signal(state: dict[str, Any], config: dict[str, Any]) -> tuple[str | None, Decimal | None]:
+    from strategy_candidates import SwingBook
+
+    preset = dict(config["strategy"]["preset"])
+    for key in ("atr_multiple",):
+        if key in preset:
+            preset[key] = Decimal(str(preset[key]))
+    book = SwingBook(preset)
+    decision: str | None = None
+    fraction: Decimal | None = None
+    for bar in state["closed_bars"]:
+        if "high" not in bar or "low" not in bar:
+            raise PaperForwardError("4h long/short bars require high and low")
+        decision, fraction = book.on_bar(
+            datetime.fromtimestamp(int(bar["open_ms"]) / 1000, tz=timezone.utc),
+            Decimal(bar["high"]),
+            Decimal(bar["low"]),
+            Decimal(bar["close"]),
+        )
+    return decision, fraction
 
 
 def on_book(state: dict[str, Any], config: dict[str, Any], quote: dict[str, Any]) -> list[dict[str, Any]]:
@@ -480,11 +663,8 @@ def on_book(state: dict[str, Any], config: dict[str, Any], quote: dict[str, Any]
     age = _now_ms() - event_ms
     if age > int(config.get("stale_book_seconds", 15)) * 1000:
         return [{"type": "warning", "reason": "stale_book_not_used_for_fill", "event_ms": event_ms}]
-    if pending["side"] == "long" and _position(state) is None:
-        return [_open_long(state, config, Decimal(quote["ask"]), event_ms, "first_quote_after_signal", int(pending["signal_bar_open_ms"]))]
-    if pending["side"] == "flat" and _position(state) is not None:
-        return [_close_long(state, config, Decimal(quote["bid"]), event_ms, "first_quote_after_signal", int(pending["signal_bar_open_ms"]))]
-    return []
+    signal_open_ms = int(pending["signal_bar_open_ms"])
+    return _fill_pending(state, config, pending, event_ms, signal_open_ms, Decimal(quote["bid"]), Decimal(quote["ask"]), "first_quote_after_signal")
 
 
 def on_next_open(state: dict[str, Any], config: dict[str, Any], bar_open: dict[str, Any]) -> list[dict[str, Any]]:
@@ -501,11 +681,35 @@ def on_next_open(state: dict[str, Any], config: dict[str, Any], bar_open: dict[s
         return []
     event_ms = int(bar_open["event_ms"])
     raw = Decimal(bar_open["open"])
-    if pending["side"] == "long" and _position(state) is None:
-        return [_open_long(state, config, raw, event_ms, "next_bar_open", int(pending["signal_bar_open_ms"]))]
-    if pending["side"] == "flat" and _position(state) is not None:
-        return [_close_long(state, config, raw, event_ms, "next_bar_open", int(pending["signal_bar_open_ms"]))]
-    return []
+    signal_open_ms = int(pending["signal_bar_open_ms"])
+    return _fill_pending(state, config, pending, event_ms, signal_open_ms, raw, raw, "next_bar_open")
+
+
+def _fill_pending(
+    state: dict[str, Any],
+    config: dict[str, Any],
+    pending: dict[str, Any],
+    event_ms: int,
+    signal_open_ms: int,
+    bid: Decimal,
+    ask: Decimal,
+    reason: str,
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    position = _position(state)
+    if position is not None and pending["side"] != position.get("side"):
+        if position.get("side") == "short":
+            events.append(_close_short(state, config, ask, event_ms, reason, signal_open_ms if pending["side"] == "flat" else None))
+        else:
+            events.append(_close_long(state, config, bid, event_ms, reason, signal_open_ms if pending["side"] == "flat" else None))
+        if pending["side"] in {"long", "short"}:
+            state["pending"] = pending
+        position = _position(state)
+    if position is None and pending["side"] == "long":
+        events.append(_open_long(state, config, ask, event_ms, reason, signal_open_ms))
+    elif position is None and pending["side"] == "short":
+        events.append(_open_short(state, config, bid, event_ms, reason, signal_open_ms))
+    return events
 
 
 def _boundaries_between(start_ms: int, end_ms: int) -> list[int]:
@@ -527,6 +731,8 @@ def _charge_funding(state: dict[str, Any], boundary_ms: int, mark: Decimal, rate
         state["funding_status"] = "observed_flat"
         return {"type": "funding", "boundary_ms": boundary_ms, "charged": "0", "reason": "flat"}
     payment = Decimal(position["qty"]) * mark * rate
+    if position.get("side") == "short":
+        payment = -payment
     state["cash"] = _d(_cash(state) - payment)
     state["funding_pnl"] = _d(Decimal(state["funding_pnl"]) - payment)
     state["processed_funding_ms"].append(boundary_ms)
@@ -575,9 +781,14 @@ def on_mark(state: dict[str, Any], config: dict[str, Any], mark: dict[str, Any])
                 events.append(_charge_funding(state, boundaries[-1], price, Decimal(rate)))
     state["last_mark_event_ms"] = event_ms
     position = _position(state)
-    if position is not None and price <= Decimal(position["stop"]):
-        reason = "stop_gap" if previous_price is not None and previous_price > Decimal(position["stop"]) else "stop"
-        events.append(_close_long(state, config, price, event_ms, reason, None))
+    if position is not None:
+        stop = Decimal(position["stop"])
+        if position.get("side") == "short" and price >= stop:
+            reason = "stop_gap" if previous_price is not None and previous_price < stop else "stop"
+            events.append(_close_short(state, config, price, event_ms, reason, None))
+        elif position.get("side", "long") != "short" and price <= stop:
+            reason = "stop_gap" if previous_price is not None and previous_price > stop else "stop"
+            events.append(_close_long(state, config, price, event_ms, reason, None))
     return events
 
 
@@ -608,10 +819,12 @@ def normalize_stream(message: dict[str, Any]) -> dict[str, Any] | None:
         }
     if kind == "kline":
         candle = data.get("k") or {}
-        if candle.get("i") != "1d":
-            raise PaperForwardError(f"kline interval {candle.get('i')!r} is not 1d; daily strategy was not changed")
+        interval = candle.get("i")
+        if interval not in {"1d", "4h"}:
+            raise PaperForwardError(f"kline interval {interval!r} is not a supported paper interval")
         return {
             "type": "kline",
+            "interval": interval,
             "open_ms": int(candle["t"]),
             "close_ms": int(candle["T"]),
             "open": Decimal(str(candle["o"])),
@@ -632,11 +845,20 @@ def apply_feed_event(state: dict[str, Any], config: dict[str, Any], message: dic
         return on_book(state, config, event)
     if event["type"] == "mark":
         return on_mark(state, config, event)
+    expected = str(config.get("bar_interval", "1d"))
+    if event.get("interval") != expected:
+        raise PaperForwardError(f"kline interval {event.get('interval')!r} does not match this config ({expected})")
     if event["closed"]:
         return on_closed_bar(
             state,
             config,
-            {"open_ms": event["open_ms"], "close_ms": event["close_ms"], "close": event["close"]},
+            {
+                "open_ms": event["open_ms"],
+                "close_ms": event["close_ms"],
+                "close": event["close"],
+                "high": event["high"],
+                "low": event["low"],
+            },
             live=True,
         )
     return on_next_open(state, config, event)
@@ -709,18 +931,17 @@ def _collect_streams(url: str, timeout: float) -> tuple[str, dict[str, Any], str
             event = normalize_stream(json.loads(text))
             if event is None:
                 continue
-            kind = "kline_1d" if event["type"] == "kline" else event["type"]
+            kind = f"kline_{event.get('interval', '1d')}" if event["type"] == "kline" else event["type"]
             if kind not in found:
                 found[kind] = {"event_ms": event.get("event_ms"), "time": _iso(event.get("event_ms"))}
                 if event["type"] == "mark":
                     found[kind]["mark"] = str(event["mark"])
                     found[kind]["funding_rate"] = None if event["funding_rate"] is None else str(event["funding_rate"])
-            if kind in {"mark", "kline_1d", "book"} and (
-                ("mark" in found and "kline_1d" in found) or "book" in found and "kline_1d" not in url and "markPrice" not in url
-            ):
-                if "bookTicker" in url and "book" in found:
+            kline_names = [name for name in found if name.startswith("kline_")]
+            if kind in {"mark", "book"} or kind.startswith("kline_"):
+                if "bookTicker" in url and "book" in found and "kline_" not in url and "markPrice" not in url:
                     break
-                if "mark" in found and "kline_1d" in found:
+                if "mark" in found and kline_names:
                     break
     except (PaperFeedError, OSError, TimeoutError, json.JSONDecodeError) as exc:
         blocker = str(exc)
@@ -755,7 +976,8 @@ def preflight(config: dict[str, Any], timeout: float = 12.0) -> dict[str, Any]:
         result["streams"].update(found)
         if blocker:
             blockers.append(f"{label}: {blocker}")
-    missing = [name for name in ("book", "mark", "kline_1d") if name not in result["streams"]]
+    expected_kline = "kline_4h" if str(config.get("bar_interval", "1d")) == "4h" else "kline_1d"
+    missing = [name for name in ("book", "mark", expected_kline) if name not in result["streams"]]
     if missing:
         blockers.append("public USDT-M feed did not deliver: " + ", ".join(missing))
     if blockers:
@@ -771,20 +993,23 @@ def cmd_preflight(config: dict[str, Any]) -> int:
     return 0 if report["ok"] else 2
 
 
-def _bars_from_kline_zip(payload: bytes, today: date) -> list[dict[str, Any]]:
+def _bars_from_kline_zip(payload: bytes, today: date, interval: str = "1d") -> list[dict[str, Any]]:
+    width = 86_400_000 if interval == "1d" else 4 * 60 * 60 * 1000
     parsed: list[dict[str, Any]] = []
     for row in parse_vision_kline_csv(zip_csv_text(payload)):
         open_time = row["timestamp"]
         if not isinstance(open_time, datetime) or open_time.date() >= today:
             continue
         open_ms = int(open_time.timestamp() * 1000)
-        parsed.append(
-            {
-                "open_ms": open_ms,
-                "close_ms": open_ms + 86_400_000 - 1,
-                "close": row["close"],
-            }
-        )
+        item = {
+            "open_ms": open_ms,
+            "close_ms": open_ms + width - 1,
+            "close": row["close"],
+        }
+        if interval == "4h":
+            item["high"] = row["high"]
+            item["low"] = row["low"]
+        parsed.append(item)
     return parsed
 
 
@@ -792,6 +1017,7 @@ def load_warmup_bars(
     now: datetime | None = None,
     cache_root: Path | None = None,
     fetcher: Callable[..., Any] | None = None,
+    interval: str = "1d",
 ) -> list[dict[str, Any]]:
     """Completed daily trade klines from the public archive. No FAPI and no fills.
 
@@ -803,10 +1029,12 @@ def load_warmup_bars(
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise PaperForwardError("warmup clock must be timezone-aware")
+    if interval not in {"1d", "4h"}:
+        raise PaperForwardError(f"warmup interval {interval!r} is not supported")
     today = now.astimezone(timezone.utc).date()
     months: list[date] = []
     cursor = date(today.year, today.month, 1)
-    for _ in range(4):
+    for _ in range(8 if interval == "4h" else 4):
         months.append(cursor)
         if cursor.month == 1:
             cursor = date(cursor.year - 1, 12, 1)
@@ -817,21 +1045,21 @@ def load_warmup_bars(
     read = fetcher or fetch_vision_zip
     for month in reversed(months):
         stamp = f"{month.year:04d}-{month.month:02d}"
-        url = f"https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1d/BTCUSDT-1d-{stamp}.zip"
+        url = f"https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/{interval}/BTCUSDT-{interval}-{stamp}.zip"
         try:
             payload, _meta = read(url, cache)
-            bars.extend(_bars_from_kline_zip(payload, today))
+            bars.extend(_bars_from_kline_zip(payload, today, interval))
         except (ResearchSafetyError, OSError, ValueError):
             continue
     day = date(today.year, today.month, 1)
     while day < today:
         url = (
-            "https://data.binance.vision/data/futures/um/daily/klines/BTCUSDT/1d/"
-            f"BTCUSDT-1d-{day.isoformat()}.zip"
+            f"https://data.binance.vision/data/futures/um/daily/klines/BTCUSDT/{interval}/"
+            f"BTCUSDT-{interval}-{day.isoformat()}.zip"
         )
         try:
             payload, _meta = read(url, cache)
-            bars.extend(_bars_from_kline_zip(payload, today))
+            bars.extend(_bars_from_kline_zip(payload, today, interval))
         except (ResearchSafetyError, OSError, ValueError):
             pass
         day += timedelta(days=1)
@@ -839,7 +1067,8 @@ def load_warmup_bars(
     for bar in bars:
         deduped[int(bar["open_ms"])] = bar
     ordered = [deduped[key] for key in sorted(deduped)]
-    return ordered[-120:]
+    keep = 1000 if interval == "4h" else 120
+    return ordered[-keep:]
 
 
 def cmd_start(
@@ -857,7 +1086,8 @@ def cmd_start(
         stop_path.unlink()
     state = load_state(state_path, config)
     if not state["closed_bars"]:
-        for bar in (warmup_loader or load_warmup_bars)():
+        loader = warmup_loader or (lambda: load_warmup_bars(interval=str(config.get("bar_interval", "1d"))))
+        for bar in loader():
             on_closed_bar(state, config, bar, live=False)
             state["warmup_bar_open_ms"].append(int(bar["open_ms"]))
         append_log(

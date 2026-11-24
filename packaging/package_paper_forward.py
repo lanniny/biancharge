@@ -18,6 +18,7 @@ PACKAGE_FILES = (
     "leverage_policy.py",
     "strategy_candidates.py",
     "research_leverage_study.py",
+    "research_swing_study.py",
     "leverage_study.example.json",
     "requirements-paper.txt",
     "packaging/README-PAPER.md",

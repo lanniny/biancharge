@@ -1,0 +1,923 @@
+{
+  "paper_only": true,
+  "orders_sent": 0,
+  "selection_rule": {
+    "train_metric": "sharpe",
+    "min_train_trades": 8,
+    "min_stitched_trades": 20,
+    "min_sharpe": "0.5",
+    "max_drawdown": "0.35",
+    "liquidations": 0,
+    "allow_short": true,
+    "stress": "fee_and_slippage_times_2_must_stay_profitable",
+    "reserved_segment": "2026-08-01 onward, scored once after selection"
+  },
+  "provenance": {
+    "bars_4h": 14976,
+    "funding_events": 7488,
+    "missing_trade_months": [],
+    "missing_mark_months": [],
+    "missing_funding_months": 0,
+    "sample_start": "2020-01-01",
+    "sample_end": "2026-10-31",
+    "holdout_start": "2026-08-01"
+  },
+  "families": {
+    "atr_breakout_4h": {
+      "selections": [
+        {
+          "test_start": "2021-01-01",
+          "test_end": "2021-07-01",
+          "index": 2,
+          "preset": {
+            "name": "atr_breakout_4h",
+            "allow_short": true,
+            "breakout": 55,
+            "atr_multiple": "2.5",
+            "daily_sma": 50
+          },
+          "train_sharpe": "1.934682163049699733255344535"
+        },
+        {
+          "test_start": "2021-07-01",
+          "test_end": "2022-01-01",
+          "index": 2,
+          "preset": {
+            "name": "atr_breakout_4h",
+            "allow_short": true,
+            "breakout": 55,
+            "atr_multiple": "2.5",
+            "daily_sma": 50
+          },
+          "train_sharpe": "1.057263931662407461835422430"
+        },
+        {
+          "test_start": "2022-01-01",
+          "test_end": "2022-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2022-07-01",
+          "test_end": "2023-01-01",
+          "index": 2,
+          "preset": {
+            "name": "atr_breakout_4h",
+            "allow_short": true,
+            "breakout": 55,
+            "atr_multiple": "2.5",
+            "daily_sma": 50
+          },
+          "train_sharpe": "0.5955454128920991275697573297"
+        },
+        {
+          "test_start": "2023-01-01",
+          "test_end": "2023-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2023-07-01",
+          "test_end": "2024-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2024-01-01",
+          "test_end": "2024-07-01",
+          "index": 2,
+          "preset": {
+            "name": "atr_breakout_4h",
+            "allow_short": true,
+            "breakout": 55,
+            "atr_multiple": "2.5",
+            "daily_sma": 50
+          },
+          "train_sharpe": "0.6083589014508628639087785331"
+        },
+        {
+          "test_start": "2024-07-01",
+          "test_end": "2025-01-01",
+          "index": 2,
+          "preset": {
+            "name": "atr_breakout_4h",
+            "allow_short": true,
+            "breakout": 55,
+            "atr_multiple": "2.5",
+            "daily_sma": 50
+          },
+          "train_sharpe": "0.7911905722803452712007706485"
+        },
+        {
+          "test_start": "2025-01-01",
+          "test_end": "2025-07-01",
+          "index": 2,
+          "preset": {
+            "name": "atr_breakout_4h",
+            "allow_short": true,
+            "breakout": 55,
+            "atr_multiple": "2.5",
+            "daily_sma": 50
+          },
+          "train_sharpe": "0.7109469206298753740529386708"
+        },
+        {
+          "test_start": "2025-07-01",
+          "test_end": "2026-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2026-01-01",
+          "test_end": "2026-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2026-07-01",
+          "test_end": "2026-08-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        }
+      ],
+      "walk_forward": {
+        "net_pnl": "-904.231921311108089332362734",
+        "annualized_return": "-0.0168422643880728484143561634",
+        "max_drawdown": "0.1020193205327942188104342745",
+        "sharpe": "-1.065368645382437592331842463",
+        "fees": "435.4439417329119042608825943",
+        "funding_pnl": "-22.52293474625829587154414456",
+        "funding_missing_events": 0,
+        "funding_status": "provided_series",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 185
+        },
+        "mean_effective_leverage": "0.2488768566570597084965073093",
+        "trades": 185,
+        "win_rate": "0.3405405405405405405405405405",
+        "payoff_ratio": "1.421081135630233059336649056",
+        "by_side": {
+          "long": {
+            "trades": 125,
+            "net_pnl": "26.16046590585068518073123398"
+          },
+          "short": {
+            "trades": 60,
+            "net_pnl": "-690.3485165265195851903460904"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "-569.208190571726972633510695",
+            "max_drawdown": "0.06898206342510833388997342133",
+            "trades": "71",
+            "by_side": {
+              "long": {
+                "trades": 52,
+                "net_pnl": "-136.3699356583983146317502277"
+              },
+              "short": {
+                "trades": 19,
+                "net_pnl": "-361.7834751858069075926072056"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "-255.589445634597792246774729",
+            "max_drawdown": "0.02710158921958987681277717008",
+            "trades": "15",
+            "by_side": {
+              "long": {
+                "trades": 5,
+                "net_pnl": "-53.02445546789648599639398789"
+              },
+              "short": {
+                "trades": 10,
+                "net_pnl": "-183.8958250887386715798038975"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "362.341588871286747506983849",
+            "max_drawdown": "0.02744658315353539130577555108",
+            "trades": "63",
+            "by_side": {
+              "long": {
+                "trades": 46,
+                "net_pnl": "437.4537306005638534225562846"
+              },
+              "short": {
+                "trades": 17,
+                "net_pnl": "18.67475534183022867777491631"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "-441.775873976070071959061159",
+            "max_drawdown": "0.04931032311469911472115539938",
+            "trades": "36",
+            "by_side": {
+              "long": {
+                "trades": 22,
+                "net_pnl": "-221.8988735684183676136808347"
+              },
+              "short": {
+                "trades": 14,
+                "net_pnl": "-163.3439715938042346957099038"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          }
+        }
+      }
+    },
+    "tsmom_4h": {
+      "selections": [
+        {
+          "test_start": "2021-01-01",
+          "test_end": "2021-07-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "2.390740753999388189907647221"
+        },
+        {
+          "test_start": "2021-07-01",
+          "test_end": "2022-01-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "1.845804532357891393892769747"
+        },
+        {
+          "test_start": "2022-01-01",
+          "test_end": "2022-07-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "1.512458292075988536466829794"
+        },
+        {
+          "test_start": "2022-07-01",
+          "test_end": "2023-01-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "1.125917948099506501597348688"
+        },
+        {
+          "test_start": "2023-01-01",
+          "test_end": "2023-07-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "0.8387738831790095361045868188"
+        },
+        {
+          "test_start": "2023-07-01",
+          "test_end": "2024-01-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "1.020518910619506998261847246"
+        },
+        {
+          "test_start": "2024-01-01",
+          "test_end": "2024-07-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "1.147605692892970100294532697"
+        },
+        {
+          "test_start": "2024-07-01",
+          "test_end": "2025-01-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "1.100215174192419495630037698"
+        },
+        {
+          "test_start": "2025-01-01",
+          "test_end": "2025-07-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "1.042199858522602254466034075"
+        },
+        {
+          "test_start": "2025-07-01",
+          "test_end": "2026-01-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "1.052115124416755709746444151"
+        },
+        {
+          "test_start": "2026-01-01",
+          "test_end": "2026-07-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "0.8792678565744186139499147730"
+        },
+        {
+          "test_start": "2026-07-01",
+          "test_end": "2026-08-01",
+          "index": 2,
+          "preset": {
+            "name": "tsmom_4h",
+            "allow_short": true,
+            "ema": 55,
+            "atr_multiple": "2"
+          },
+          "train_sharpe": "0.9402290823506297809939045746"
+        }
+      ],
+      "walk_forward": {
+        "net_pnl": "4647.30947990164140458882991",
+        "annualized_return": "0.070796872319046648600423606",
+        "max_drawdown": "0.1891383318772955376028099943",
+        "sharpe": "0.4970928093713809907976032716",
+        "fees": "4054.710270380318941058111043",
+        "funding_pnl": "-907.7541793415273439439259232",
+        "funding_missing_events": 18,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 830,
+          "2": 17
+        },
+        "mean_effective_leverage": "0.3835691384905182977852642823",
+        "trades": 840,
+        "win_rate": "0.2797619047619047619047619048",
+        "payoff_ratio": "3.130303807856451631773105757",
+        "by_side": {
+          "long": {
+            "trades": 422,
+            "net_pnl": "8231.102152976854998557207461"
+          },
+          "short": {
+            "trades": 418,
+            "net_pnl": "-1450.613317460305871554008883"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "337.30985968419111934338133",
+            "max_drawdown": "0.09563230595856510965406794207",
+            "trades": "163",
+            "by_side": {
+              "long": {
+                "trades": 86,
+                "net_pnl": "1264.929628004363893993062568"
+              },
+              "short": {
+                "trades": 77,
+                "net_pnl": "-453.8498553684785445866310992"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "-1159.206769651287143106608972",
+            "max_drawdown": "0.1816217164027072841611576326",
+            "trades": "165",
+            "by_side": {
+              "long": {
+                "trades": 65,
+                "net_pnl": "-1492.818100720345872807064834"
+              },
+              "short": {
+                "trades": 100,
+                "net_pnl": "299.6418653873758950226293630"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "4018.939259022873398940175821",
+            "max_drawdown": "0.1273580681859038087968372172",
+            "trades": "137",
+            "by_side": {
+              "long": {
+                "trades": 82,
+                "net_pnl": "4727.189220453241263223591043"
+              },
+              "short": {
+                "trades": 55,
+                "net_pnl": "-183.3675895013363643544317470"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "1245.09290908088766779731045",
+            "max_drawdown": "0.1449995009176790068997127020",
+            "trades": "137",
+            "by_side": {
+              "long": {
+                "trades": 81,
+                "net_pnl": "2944.250875907394040360219230"
+              },
+              "short": {
+                "trades": 56,
+                "net_pnl": "-1098.539219071086281176510724"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "-136.81242738376703014893451",
+            "max_drawdown": "0.1491342041367864274752232766",
+            "trades": "153",
+            "by_side": {
+              "long": {
+                "trades": 68,
+                "net_pnl": "1596.673051926919113772544432"
+              },
+              "short": {
+                "trades": 85,
+                "net_pnl": "-1205.863468295800910644393952"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "394.82315641690705661639759",
+            "max_drawdown": "0.1235208060681237063818628173",
+            "trades": "85",
+            "by_side": {
+              "long": {
+                "trades": 40,
+                "net_pnl": "-809.1225225947174399851449764"
+              },
+              "short": {
+                "trades": 45,
+                "net_pnl": "1191.364949389020334185329274"
+              }
+            }
+          }
+        }
+      }
+    },
+    "donchian_trail_4h": {
+      "selections": [
+        {
+          "test_start": "2021-01-01",
+          "test_end": "2021-07-01",
+          "index": 1,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 55,
+            "exit": 20,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "2.648187700369009260648378789"
+        },
+        {
+          "test_start": "2021-07-01",
+          "test_end": "2022-01-01",
+          "index": 1,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 55,
+            "exit": 20,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.663869970205089133342516253"
+        },
+        {
+          "test_start": "2022-01-01",
+          "test_end": "2022-07-01",
+          "index": 1,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 55,
+            "exit": 20,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.293937137233739044584691277"
+        },
+        {
+          "test_start": "2022-07-01",
+          "test_end": "2023-01-01",
+          "index": 1,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 55,
+            "exit": 20,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.343772800603308434458817366"
+        },
+        {
+          "test_start": "2023-01-01",
+          "test_end": "2023-07-01",
+          "index": 1,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 55,
+            "exit": 20,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.120275639438813922725597966"
+        },
+        {
+          "test_start": "2023-07-01",
+          "test_end": "2024-01-01",
+          "index": 0,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 20,
+            "exit": 10,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.285875447943524561939685729"
+        },
+        {
+          "test_start": "2024-01-01",
+          "test_end": "2024-07-01",
+          "index": 1,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 55,
+            "exit": 20,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.199430269469668736644405305"
+        },
+        {
+          "test_start": "2024-07-01",
+          "test_end": "2025-01-01",
+          "index": 1,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 55,
+            "exit": 20,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.246335432174925864675049487"
+        },
+        {
+          "test_start": "2025-01-01",
+          "test_end": "2025-07-01",
+          "index": 1,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 55,
+            "exit": 20,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.122971649454101356534566588"
+        },
+        {
+          "test_start": "2025-07-01",
+          "test_end": "2026-01-01",
+          "index": 0,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 20,
+            "exit": 10,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "1.015248952151363258997165959"
+        },
+        {
+          "test_start": "2026-01-01",
+          "test_end": "2026-07-01",
+          "index": 0,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 20,
+            "exit": 10,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "0.9622680510888836324488740579"
+        },
+        {
+          "test_start": "2026-07-01",
+          "test_end": "2026-08-01",
+          "index": 0,
+          "preset": {
+            "name": "donchian_trail_4h",
+            "allow_short": true,
+            "entry": 20,
+            "exit": 10,
+            "atr_multiple": "3",
+            "daily_sma": 100
+          },
+          "train_sharpe": "0.9632048484716976466843884586"
+        }
+      ],
+      "walk_forward": {
+        "net_pnl": "1230.48974643656439079301278",
+        "annualized_return": "0.021015759051599803898848561",
+        "max_drawdown": "0.1127993291032633953330948073",
+        "sharpe": "0.3181198476814610117339773006",
+        "fees": "412.8198820461913515518382391",
+        "funding_pnl": "-572.3607971427665479894515877",
+        "funding_missing_events": 0,
+        "funding_status": "provided_series",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 143
+        },
+        "mean_effective_leverage": "0.2665415948438719303386063635",
+        "trades": 139,
+        "win_rate": "0.3741007194244604316546762590",
+        "payoff_ratio": "2.092412992271850057489604748",
+        "by_side": {
+          "long": {
+            "trades": 78,
+            "net_pnl": "1520.570190936492020440920105"
+          },
+          "short": {
+            "trades": 61,
+            "net_pnl": "416.2815935542643051007886674"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "-97.763694866580126802256591",
+            "max_drawdown": "0.07764618129643903995817861933",
+            "trades": "20",
+            "by_side": {
+              "long": {
+                "trades": 14,
+                "net_pnl": "160.0842011340067655029352973"
+              },
+              "short": {
+                "trades": 6,
+                "net_pnl": "65.98538193150497173924494959"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "422.928579721780566904248301",
+            "max_drawdown": "0.05796991477175118383648797791",
+            "trades": "19",
+            "by_side": {
+              "long": {
+                "trades": 3,
+                "net_pnl": "-94.7157901891436735773807221"
+              },
+              "short": {
+                "trades": 16,
+                "net_pnl": "588.1322859865961084266845211"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "602.14473293524938458166922",
+            "max_drawdown": "0.1002850769645283238333280453",
+            "trades": "23",
+            "by_side": {
+              "long": {
+                "trades": 18,
+                "net_pnl": "1050.085626723921891641269715"
+              },
+              "short": {
+                "trades": 5,
+                "net_pnl": "-450.5734763683807665975344623"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "631.64489824808126709960145",
+            "max_drawdown": "0.06274079786023543483643713864",
+            "trades": "26",
+            "by_side": {
+              "long": {
+                "trades": 21,
+                "net_pnl": "869.2658231630751451261049174"
+              },
+              "short": {
+                "trades": 5,
+                "net_pnl": "-40.82886307486135190557537394"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "-577.87587329192504037045444",
+            "max_drawdown": "0.09841062749381200546720610610",
+            "trades": "31",
+            "by_side": {
+              "long": {
+                "trades": 17,
+                "net_pnl": "-220.7503675738297965181150544"
+              },
+              "short": {
+                "trades": 14,
+                "net_pnl": "-272.1586873832086043406616825"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "249.41110368995833938020484",
+            "max_drawdown": "0.06407232099191396719141782523",
+            "trades": "20",
+            "by_side": {
+              "long": {
+                "trades": 5,
+                "net_pnl": "-243.3993023215383117338940520"
+              },
+              "short": {
+                "trades": 15,
+                "net_pnl": "525.7249524626139477786307153"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "cost_stress": {
+    "atr_breakout_4h": {
+      "net_pnl": "-1470.192000839018990144724121",
+      "annualized_return": "-0.0280969487387266069257904362",
+      "max_drawdown": "0.1558744096129843637452292318",
+      "sharpe": "-1.737503328992692577004064916",
+      "fees": "843.8065750693743408629839612",
+      "funding_pnl": "-22.15765431662111249200492157",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {},
+      "mean_effective_leverage": "0",
+      "trades": 185,
+      "win_rate": "0.2918918918918918918918918919",
+      "payoff_ratio": "1.494521761359318227805061353",
+      "by_side": {
+        "long": {
+          "trades": 125,
+          "net_pnl": "-239.3040648355956829926923212"
+        },
+        "short": {
+          "trades": 60,
+          "net_pnl": "-787.1857445337422761254397237"
+        }
+      }
+    },
+    "tsmom_4h": {
+      "net_pnl": "-668.074105048008614291038086",
+      "annualized_return": "-0.0123154544375937375027386851",
+      "max_drawdown": "0.2785010655244067687915919048",
+      "sharpe": "0.005285288333669692745339891458",
+      "fees": "6399.142984468382774834930069",
+      "funding_pnl": "-808.7140273493077402246326728",
+      "funding_missing_events": 18,
+      "funding_status": "incomplete",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {},
+      "mean_effective_leverage": "0",
+      "trades": 841,
+      "win_rate": "0.2532699167657550535077288942",
+      "payoff_ratio": "3.240782597427261268620463614",
+      "by_side": {
+        "long": {
+          "trades": 422,
+          "net_pnl": "5290.102651190630414242836826"
+        },
+        "short": {
+          "trades": 419,
+          "net_pnl": "-2589.586895742220983011785483"
+        }
+      }
+    },
+    "donchian_trail_4h": {
+      "net_pnl": "686.64179615660495266182021",
+      "annualized_return": "0.011972997094057968781777113",
+      "max_drawdown": "0.1242960689031434212810552166",
+      "sharpe": "0.1973972223877589842586722264",
+      "fees": "805.3844377405892694546880673",
+      "funding_pnl": "-566.6669121779514212876553212",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {},
+      "mean_effective_leverage": "0",
+      "trades": 139,
+      "win_rate": "0.3741007194244604316546762590",
+      "payoff_ratio": "2.015355553103838501660409621",
+      "by_side": {
+        "long": {
+          "trades": 78,
+          "net_pnl": "1309.130227800041494447073428"
+        },
+        "short": {
+          "trades": 61,
+          "net_pnl": "278.5910338417327067567548624"
+        }
+      }
+    }
+  },
+  "buy_and_hold_before_holdout": {
+    "net_pnl": "154.93638567561650906932359",
+    "funding_pnl": "-11548.79615754988394536323333",
+    "funding_missing_events": 27,
+    "ending_equity": "10154.93638567561650906932359"
+  },
+  "recommendation": {
+    "strategy": null,
+    "reason": "no_candidate_survived_walk_forward_and_cost_stress",
+    "holdout": null
+  }
+}

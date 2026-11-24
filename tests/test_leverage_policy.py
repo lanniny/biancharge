@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from leverage_policy import MaintenanceModel, liquidation_distance, plan_leverage, _move_to_exhaust_initial_margin
-from strategy_candidates import atr_at, atr_breakout_decision, baseline_side
+from strategy_candidates import ATR_BREAKOUT_GRID, DONCHIAN_GRID, TSMOM_GRID, SwingBook, atr_at, atr_breakout_decision, baseline_side
 
 
 MODEL = MaintenanceModel()
@@ -140,6 +141,22 @@ class SignalTests(unittest.TestCase):
 
     def test_baseline_side_needs_fifty_closes(self) -> None:
         self.assertIsNone(baseline_side([Decimal(100 + index) for index in range(40)]))
+
+    def test_every_swing_preset_allows_shorts_and_can_signal_one(self) -> None:
+        for grid in (ATR_BREAKOUT_GRID, TSMOM_GRID, DONCHIAN_GRID):
+            for preset in grid:
+                self.assertIs(preset["allow_short"], True)
+                book = SwingBook(preset)
+                start = datetime(2024, 1, 2, tzinfo=timezone.utc)
+                last = None
+                for index in range(180):
+                    price = Decimal("200") - Decimal(index) * Decimal("0.5")
+                    last = book.on_bar(start + timedelta(days=index), price + Decimal("0.2"), price - Decimal("0.2"), price)
+                self.assertEqual(last[0], "short")
+
+    def test_daily_baseline_stays_long_only(self) -> None:
+        falling = [Decimal("200") - Decimal(index) for index in range(80)]
+        self.assertNotEqual(baseline_side(falling), "short")
 
     def test_atr_uses_only_the_prefix(self) -> None:
         highs = [Decimal("10")] * 20

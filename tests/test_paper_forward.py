@@ -160,6 +160,41 @@ class ForwardAccountingTests(unittest.TestCase):
         self.assertEqual(opened[0]["reason"], "next_bar_open")
         self.assertEqual(Decimal(opened[0]["raw_price"]), Decimal("170"))
 
+    def test_daily_config_stays_long_only_while_a_short_pending_can_fill(self) -> None:
+        config = _config()
+        self.assertNotIn("allow_short", config["strategy"])
+        self.assertEqual(config["strategy"]["name"], "baseline_sma_momentum")
+        state = new_state(config)
+        import paper_forward
+
+        quote_ms = paper_forward._now_ms()
+        state["pending"] = {
+            "signal_bar_open_ms": 10,
+            "signal_bar_close_ms": quote_ms - 1000,
+            "side": "short",
+            "stop_distance": "0.02",
+        }
+        filled = on_book(state, config, {"bid": Decimal("100"), "ask": Decimal("100.1"), "event_ms": quote_ms})
+        self.assertEqual(filled[0]["action"], "open_short")
+        self.assertEqual(state["position"]["side"], "short")
+        entry = Decimal(state["position"]["entry"])
+        stop = Decimal(state["position"]["stop"])
+        liq = Decimal(state["position"]["liquidation_price"])
+        self.assertGreater(stop, entry)
+        self.assertGreater(liq, stop)
+        boundary = ((quote_ms // (8 * 60 * 60 * 1000)) + 1) * (8 * 60 * 60 * 1000)
+        on_mark(state, config, {"mark": entry, "funding_rate": Decimal("0.0001"), "event_ms": boundary - 1000, "index": None})
+        cash_before = Decimal(state["cash"])
+        on_mark(state, config, {"mark": entry, "funding_rate": Decimal("0.0001"), "event_ms": boundary + 1000, "index": None})
+        self.assertGreater(Decimal(state["cash"]), cash_before)
+        stopped = on_mark(
+            state,
+            config,
+            {"mark": stop + Decimal("1"), "funding_rate": Decimal("0.0001"), "event_ms": boundary + 2000, "index": None},
+        )
+        self.assertEqual(stopped[-1]["action"], "close_short")
+        self.assertLess(Decimal(stopped[-1]["realized_price_pnl"]), 0)
+
     def test_missing_funding_rate_is_not_zero(self) -> None:
         config = _config()
         state = new_state(config)
