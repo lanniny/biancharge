@@ -19,12 +19,14 @@ import argparse
 import csv
 import json
 import sys
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
+
+from research_calendar import is_nyse_session
 
 
 MODE_BACKTEST = "backtest"
@@ -124,9 +126,41 @@ class ResearchBar:
     low: Decimal
     close: Decimal
     volume: Decimal
+    mark_open: Decimal | None = None
+    mark_high: Decimal | None = None
+    mark_low: Decimal | None = None
     mark_close: Decimal | None = None
     index_close: Decimal | None = None
     funding_rate: Decimal | None = None
+    session_daily: bool = False
+
+
+@dataclass(frozen=True)
+class FundingSettlement:
+    timestamp: datetime
+    rate: Decimal
+    mark: Decimal | None
+
+
+@dataclass(frozen=True)
+class Dividend:
+    timestamp: datetime
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class Split:
+    timestamp: datetime
+    ratio: Decimal
+    already_in_prices: bool = False
+
+
+@dataclass
+class MarketAux:
+    funding: dict[str, list[FundingSettlement]] = field(default_factory=dict)
+    dividends: dict[str, list[Dividend]] = field(default_factory=dict)
+    splits: dict[str, list[Split]] = field(default_factory=dict)
+    funding_complete: dict[str, bool] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -165,6 +199,11 @@ class AssetSpec:
     leverage: int
     allow_short: bool
     maintenance_margin_rate: Decimal
+    weight: Decimal | None = None
+    source_type: str = ""
+    source_interval: str = "1d"
+    source_start: str = ""
+    source_end: str = ""
 
 
 @dataclass(frozen=True)
@@ -181,6 +220,9 @@ class ResearchConfig:
     fills_path: str | None
     notes: tuple[str, ...]
     config_dir: Path
+    stress_multiplier: Decimal = Decimal("2")
+    parameters_locked: bool = False
+    study: bool = False
 
 
 @dataclass
@@ -213,6 +255,8 @@ class Book:
     max_drawdown: Decimal = Decimal("0")
     max_drawdown_limit: Decimal = Decimal("1")
     halted: bool = False
+    sleeve_cash: dict[str, Decimal] = field(default_factory=dict)
+    funding_mark_missing: int = 0
     curve: list[tuple[datetime, Decimal]] = field(default_factory=list)
     ledger: list[dict[str, Any]] = field(default_factory=list)
 
@@ -430,7 +474,16 @@ def config_from_mapping(payload: dict[str, Any], *, config_dir: Path | None = No
         slip_bps = _dec(item.get("slippage_bps", default_slip), f"{symbol}.slippage_bps")
         if fee_bps < 0 or slip_bps < 0:
             raise ResearchSafetyError("fee_bps and slippage_bps must be >= 0")
+        source = item.get("source") if isinstance(item.get("source"), dict) else {}
+        source_type = str(source.get("type", "")).strip()
+        if source_type in {"binance_fapi", "alpaca"}:
+            raise ResearchSafetyError(f"{symbol} source {source_type} is not available on the credential-free research path")
         csv_path = item.get("csv")
+        if not csv_path and not source_type:
+            raise ResearchSafetyError(f"{symbol} needs a csv path or a public source")
+        weight = _dec(item["weight"], f"{symbol}.weight") if item.get("weight") not in (None, "") else None
+        if weight is not None and weight <= 0:
+            raise ResearchSafetyError(f"{symbol} weight must be positive")
         assets.append(
             AssetSpec(
                 symbol=symbol,
@@ -442,6 +495,11 @@ def config_from_mapping(payload: dict[str, Any], *, config_dir: Path | None = No
                 leverage=leverage,
                 allow_short=allow_short,
                 maintenance_margin_rate=maintenance,
+                weight=weight,
+                source_type=source_type,
+                source_interval=str(source.get("interval", "1d")),
+                source_start=str(source.get("start", "")),
+                source_end=str(source.get("end", "")),
             )
         )
 
@@ -463,6 +521,9 @@ def config_from_mapping(payload: dict[str, Any], *, config_dir: Path | None = No
         fills_path=payload.get("fills_path"),
         notes=notes,
         config_dir=config_dir or Path("."),
+        stress_multiplier=_dec(payload.get("stress_multiplier", "2"), "stress_multiplier"),
+        parameters_locked=bool(payload.get("parameters_locked", False)),
+        study=bool(payload.get("study", False)),
     )
 
 
@@ -614,8 +675,21 @@ def unrealized(position: Position, price: Decimal) -> Decimal:
     return (position.entry_price - price) * position.qty
 
 
+def _account_cash(book: Book, symbol: str) -> Decimal:
+    if book.sleeve_cash:
+        return book.sleeve_cash[symbol]
+    return book.cash
+
+
+def _set_account_cash(book: Book, symbol: str, value: Decimal) -> None:
+    if book.sleeve_cash:
+        book.sleeve_cash[symbol] = value
+    else:
+        book.cash = value
+
+
 def book_equity(book: Book) -> Decimal:
-    equity = book.cash
+    equity = sum(book.sleeve_cash.values(), Decimal("0")) if book.sleeve_cash else book.cash
     for position in book.positions.values():
         mark = book.last_marks.get(position.symbol, position.entry_price)
         if book.kind == "cash":
@@ -681,20 +755,39 @@ def protective_exit(
     bar: ResearchBar,
     maintenance_margin_rate: Decimal,
 ) -> tuple[str, Decimal] | None:
-    """Return (reason, raw_trade_price) for a stop or isolated liquidation.
+    """Return (reason, raw_fill_price) for a stop or isolated liquidation.
 
-    Stops are offsets from the trade fill. Liquidation is solved on the mark
-    price, then shifted back onto the trade print by ``mark_close - close``
-    for this bar. A gap through the trigger fills at the trade open, not at
-    the more favorable trigger. Index prices are ignored.
+    When mark OHLC exists, the trigger is the mark path. A gap through the
+    mark open fills at the trade open. An intrabar touch fills at the trigger
+    itself: the bar does not say whether the high or the low printed first, so
+    the adverse level is used and the favorable extreme is not a fill.
+    Without mark OHLC, trade prices are used and a close-only mark is shifted
+    onto that path. Index prices are ignored. Liquidation is a single
+    maintenance-rate approximation, not Binance's tier schedule.
     """
-    shift = mark_shift(bar)
+    use_mark = None not in (bar.mark_open, bar.mark_high, bar.mark_low)
+    if use_mark:
+        open_, high, low = bar.mark_open, bar.mark_high, bar.mark_low
+        gap_price = bar.open
+    else:
+        shift = mark_shift(bar)
+        open_, high, low = bar.open + shift, bar.high + shift, bar.low + shift
+        gap_price = bar.open
+    assert open_ is not None and high is not None and low is not None
     triggers: list[tuple[str, Decimal]] = [("stop", position.stop_price)]
     if position.product == PRODUCT_PERP:
         liq = liquidation_price(position, maintenance_margin_rate)
         if liq is not None:
-            triggers.append(("liquidation", liq - shift))
-    return _first_trade_hit(position.side, bar.open, bar.high, bar.low, triggers)
+            triggers.append(("liquidation", liq if use_mark else liq - mark_shift(bar)))
+    hit = _first_trade_hit(position.side, open_, high, low, triggers)
+    if hit is None:
+        return None
+    reason, raw = hit
+    if reason.endswith("_gap"):
+        return reason, gap_price
+    if not use_mark:
+        return reason, raw - mark_shift(bar)
+    return reason, raw
 
 
 def _append_ledger(book: Book, timestamp: datetime, kind: str, amount: Decimal, symbol: str) -> None:
@@ -720,10 +813,12 @@ def _close_position(
     price_pnl = unrealized(position, fill_price)
     fee = fill_price * position.qty * asset.fee_bps / BPS
     slippage_cost = abs(fill_price - raw_price) * position.qty
+    cash = _account_cash(book, asset.symbol)
     if book.kind == "cash":
-        book.cash += fill_price * position.qty - fee
+        cash += fill_price * position.qty - fee
     else:
-        book.cash += position.margin + price_pnl - fee
+        cash += position.margin + price_pnl - fee
+    _set_account_cash(book, asset.symbol, cash)
     book.fees += fee
     book.slippage += slippage_cost
     book.realized += price_pnl
@@ -788,6 +883,14 @@ def _fill_record(
 
 
 def _sizing_equity(book: Book, symbol: str, mark: Decimal) -> Decimal:
+    if book.sleeve_cash:
+        cash = book.sleeve_cash[symbol]
+        position = book.positions.get(symbol)
+        if position is None:
+            return cash
+        if book.kind == "cash":
+            return cash + position.qty * mark
+        return cash + position.margin + unrealized(position, mark)
     saved = book.last_marks.get(symbol)
     book.last_marks[symbol] = mark
     try:
@@ -814,8 +917,8 @@ def _try_open(
     reason = None
     if book.halted:
         reason = "max_drawdown_halt"
-    elif asset.product in CASH_PRODUCTS and not in_regular_session(bar.timestamp, session):
-        reason = "outside_session"
+    elif asset.product in CASH_PRODUCTS and (reason := cash_entry_block_reason(bar, session)):
+        pass
     elif len(book.positions) >= risk.max_concurrent_positions:
         reason = "max_concurrent_positions"
     elif risk.risk_per_trade_pct <= 0:
@@ -857,7 +960,7 @@ def _try_open(
     else:
         unit_cash = fill_price / Decimal(asset.leverage) + fill_price * fee_rate
     if unit_cash > 0:
-        qty = min(qty, book.cash / unit_cash)
+        qty = min(qty, _account_cash(book, asset.symbol) / unit_cash)
     if qty <= 0:
         rejections.append(
             {
@@ -873,10 +976,12 @@ def _try_open(
     notional = fill_price * qty
     fee = notional * fee_rate
     margin = Decimal("0") if book.kind == "cash" else notional / Decimal(asset.leverage)
+    cash = _account_cash(book, asset.symbol)
     if book.kind == "cash":
-        book.cash -= notional + fee
+        cash -= notional + fee
     else:
-        book.cash -= margin + fee
+        cash -= margin + fee
+    _set_account_cash(book, asset.symbol, cash)
     stop_price = fill_price * (Decimal("1") - strategy.stop_pct) if side == "long" else fill_price * (
         Decimal("1") + strategy.stop_pct
     )
@@ -916,6 +1021,69 @@ def _try_open(
     )
 
 
+def cash_entry_block_reason(bar: ResearchBar, session: SessionSpec) -> str | None:
+    local = bar.timestamp.astimezone(ZoneInfo(session.timezone))
+    if local.weekday() >= 5:
+        return "outside_session"
+    if not is_nyse_session(local.date()):
+        return "exchange_holiday"
+    if bar.session_daily:
+        return None
+    if not in_regular_session(bar.timestamp, session):
+        return "outside_session"
+    return None
+
+
+def _apply_corporate_actions(
+    book: Book,
+    asset: AssetSpec,
+    bar: ResearchBar,
+    dividends: tuple[Dividend, ...] | list[Dividend],
+    splits: tuple[Split, ...] | list[Split],
+) -> None:
+    position = book.positions.get(asset.symbol)
+    for split in splits:
+        if split.timestamp != bar.timestamp or split.already_in_prices or position is None:
+            continue
+        if split.ratio <= 0:
+            raise ResearchSafetyError("split ratio must be positive")
+        position.qty *= split.ratio
+        position.entry_price /= split.ratio
+        position.stop_price /= split.ratio
+    if position is None or position.side != "long":
+        return
+    for dividend in dividends:
+        if dividend.timestamp != bar.timestamp:
+            continue
+        cash_amount = dividend.amount * position.qty
+        _set_account_cash(book, asset.symbol, _account_cash(book, asset.symbol) + cash_amount)
+        _append_ledger(book, bar.timestamp, "dividend", cash_amount, asset.symbol)
+
+
+def _apply_funding_settlement(
+    book: Book,
+    asset: AssetSpec,
+    position: Position,
+    settlement: FundingSettlement,
+) -> None:
+    if settlement.mark is None or settlement.mark <= 0:
+        book.funding_mark_missing += 1
+        return
+    notional = position.qty * settlement.mark
+    payment = notional * settlement.rate
+    if position.side == "short":
+        payment = -payment
+    cash = _account_cash(book, asset.symbol) - payment
+    if cash < 0:
+        pull = min(position.margin, -cash)
+        position.margin -= pull
+        cash += pull
+    _set_account_cash(book, asset.symbol, cash)
+    book.funding_pnl -= payment
+    book.funding_events += 1
+    _append_ledger(book, settlement.timestamp, "funding", -payment, asset.symbol)
+
+
 def _apply_funding(book: Book, asset: AssetSpec, position: Position, bar: ResearchBar) -> None:
     if asset.product != PRODUCT_PERP or bar.funding_rate is None:
         return
@@ -923,11 +1091,12 @@ def _apply_funding(book: Book, asset: AssetSpec, position: Position, bar: Resear
     payment = notional * bar.funding_rate
     if position.side == "short":
         payment = -payment
-    book.cash -= payment
-    if book.cash < 0:
-        pull = min(position.margin, -book.cash)
+    cash = _account_cash(book, asset.symbol) - payment
+    if cash < 0:
+        pull = min(position.margin, -cash)
         position.margin -= pull
-        book.cash += pull
+        cash += pull
+    _set_account_cash(book, asset.symbol, cash)
     book.funding_pnl -= payment
     book.funding_events += 1
     _append_ledger(book, bar.timestamp, "funding", -payment, asset.symbol)
@@ -956,11 +1125,23 @@ def _process_bar(
     session: SessionSpec,
     fills: list[dict[str, Any]],
     rejections: list[dict[str, Any]],
+    *,
+    signal_mode: str = "baseline",
+    open_funding: list[FundingSettlement] | None = None,
+    later_funding: list[FundingSettlement] | None = None,
+    dividends: list[Dividend] | None = None,
+    splits: list[Split] | None = None,
+    use_bar_funding: bool = True,
 ) -> None:
     bar = bars[index]
+    stops_enabled = signal_mode != "buy_and_hold"
+    _apply_corporate_actions(book, asset, bar, dividends or [], splits or [])
     position = book.positions.get(asset.symbol)
+    for settlement in open_funding or []:
+        if position is not None:
+            _apply_funding_settlement(book, asset, position, settlement)
     stopped = False
-    if position is not None:
+    if position is not None and stops_enabled:
         hit = protective_exit(position, bar, asset.maintenance_margin_rate)
         if hit is not None and hit[0].endswith("_gap"):
             reason, raw = hit
@@ -978,11 +1159,16 @@ def _process_bar(
             stopped = True
             position = None
 
-    desired = None if index == 0 else desired_side(
-        [item.close for item in bars[:index]],
-        strategy,
-        allow_short=asset.allow_short,
-    )
+    if signal_mode == "buy_and_hold":
+        desired: str | None = "long" if index >= strategy.slow_window else None
+    elif index == 0:
+        desired = None
+    else:
+        desired = desired_side(
+            [item.close for item in bars[:index]],
+            strategy,
+            allow_short=asset.allow_short,
+        )
     if desired is not None and not stopped:
         signal_timestamp = bars[index - 1].timestamp
         current = book.positions.get(asset.symbol)
@@ -1014,7 +1200,7 @@ def _process_bar(
             )
 
     position = book.positions.get(asset.symbol)
-    if position is not None and not stopped:
+    if position is not None and not stopped and stops_enabled:
         hit = protective_exit(position, bar, asset.maintenance_margin_rate)
         if hit is not None and not hit[0].endswith("_gap"):
             reason, raw = hit
@@ -1030,17 +1216,26 @@ def _process_bar(
                 bar=bar,
             )
             position = None
-    if position is not None:
+    if position is not None and use_bar_funding:
         _apply_funding(book, asset, position, bar)
+    if position is not None:
+        for settlement in later_funding or []:
+            _apply_funding_settlement(book, asset, position, settlement)
     book.last_marks[asset.symbol] = mark_price(bar)
     _update_drawdown(book, bar.timestamp)
 
 
 def _coverage(bars: list[ResearchBar]) -> dict[str, str]:
+    full_marks = [
+        bar.mark_open is not None and bar.mark_high is not None and bar.mark_low is not None and bar.mark_close is not None
+        for bar in bars
+    ]
     marks = [bar.mark_close is not None for bar in bars]
     indexes = [bar.index_close is not None for bar in bars]
     funding = [bar.funding_rate is not None for bar in bars]
-    if all(marks):
+    if full_marks and all(full_marks):
+        mark_status = "provided_ohlc"
+    elif all(marks):
         mark_status = "provided"
     elif any(marks):
         mark_status = "partial_fallback_trade_prices"
@@ -1084,7 +1279,13 @@ def _segment_amounts(
     start: datetime | None,
     end: datetime | None,
 ) -> dict[str, Decimal]:
-    totals = {"net_pnl": Decimal("0"), "fees": Decimal("0"), "funding": Decimal("0"), "realized": Decimal("0")}
+    totals = {
+        "net_pnl": Decimal("0"),
+        "fees": Decimal("0"),
+        "funding": Decimal("0"),
+        "realized": Decimal("0"),
+        "dividends": Decimal("0"),
+    }
     for event in ledger:
         timestamp = event["time"]
         if start is not None and timestamp < start:
@@ -1101,6 +1302,8 @@ def _segment_amounts(
             totals["realized"] += amount
         elif event["kind"] == "unrealized":
             totals["realized"] += amount
+        elif event["kind"] == "dividend":
+            totals["dividends"] += amount
     return totals
 
 
@@ -1145,6 +1348,7 @@ def _sample_block(
         "net_pnl_includes_funding": funding_status in {"provided_series", "not_applicable"},
         "fees": _dec_str(totals["fees"]),
         "funding": _funding_field(funding_status, totals["funding"]),
+        "dividends": _dec_str(totals["dividends"]),
         "realized_price_pnl": _dec_str(totals["realized"]),
         "fills": _fill_count(selected, None, start, end),
         "max_drawdown": _dec_str(drawdown) if drawdown is not None else None,
@@ -1165,8 +1369,8 @@ def _limitations(config: ResearchConfig, asset_coverage: dict[str, dict[str, str
         "Binance 的 AAPLUSDT 一类代码是交易所合成行情，本路径拒绝把它们当成纳斯达克股票或上市 ETF。",
         "期权与 CME 期货未实现；请求这些产品会直接失败。",
         "永续模拟使用逐仓保证金。标记价缺失时回退到成交价，并在报告中标明；指数价即使提供也不进入盈亏。",
-        "资金费只有在 K 线提供 funding_rate 时才入账。整列缺失时 funding 为 null，净盈亏不含资金费。",
-        "止损/强平的标记路径用 mark_close-close 平移当根 OHLC，不是逐笔标记价回放。",
+        "资金费来自结算序列或 K 线列。没有序列时 funding 为 null，净盈亏不含资金费，不会把缺失记成 0。",
+        "有完整标记 OHLC 时，止损和强平看标记价路径；同一根 K 线的高低点先后未知，按不利方向成交。只有收盘标记价时才用收盘差平移。",
         "样本外区间只做报告切分，不会反过来选择参数。未提供 sample_split_timestamp 时不输出样本外结论。",
         "模拟杠杆只存在于研究账本，不会给任何账户开启杠杆。",
     ]
@@ -1178,37 +1382,71 @@ def _limitations(config: ResearchConfig, asset_coverage: dict[str, dict[str, str
     return notes
 
 
-def run_research(config: ResearchConfig, series: dict[str, list[ResearchBar]]) -> dict[str, Any]:
+def _make_book(kind: str, currency: str, assets: list[AssetSpec], config: ResearchConfig) -> Book:
+    weights = [asset.weight for asset in assets]
+    sleeve: dict[str, Decimal] = {}
+    if any(weight is not None for weight in weights):
+        if any(weight is None for weight in weights):
+            raise ResearchSafetyError(f"{kind} ledger weights must be set on every symbol")
+        total = sum((weight for weight in weights if weight is not None), Decimal("0"))
+        if abs(total - Decimal("1")) > Decimal("0.0000001"):
+            raise ResearchSafetyError(f"{kind} allocation weights must sum to 1")
+        for asset, weight in zip(assets, weights):
+            assert weight is not None
+            sleeve[asset.symbol] = config.starting_equity * weight
+        cash = Decimal("0")
+    else:
+        cash = config.starting_equity
+    return Book(
+        kind=kind,
+        currency=currency,
+        cash=cash,
+        starting=config.starting_equity,
+        peak=config.starting_equity,
+        max_drawdown_limit=config.risk.max_drawdown_pct,
+        sleeve_cash=sleeve,
+    )
+
+
+def _bucket_by_bar(bars: list[ResearchBar], events: list[Any]) -> list[list[Any]]:
+    buckets: list[list[Any]] = [[] for _ in bars]
+    ordered = sorted(events, key=lambda item: item.timestamp)
+    cursor = 0
+    for index, bar in enumerate(bars):
+        end = bars[index + 1].timestamp if index + 1 < len(bars) else bar.timestamp + timedelta(days=2)
+        while cursor < len(ordered) and ordered[cursor].timestamp < end:
+            if ordered[cursor].timestamp >= bar.timestamp:
+                buckets[index].append(ordered[cursor])
+            cursor += 1
+    return buckets
+
+
+def run_research(
+    config: ResearchConfig,
+    series: dict[str, list[ResearchBar]],
+    *,
+    aux: MarketAux | None = None,
+    signal_mode: str = "baseline",
+) -> dict[str, Any]:
     if config.mode not in ALLOWED_MODES:
         raise ResearchSafetyError("research path is paper/backtest only")
+    if signal_mode not in {"baseline", "buy_and_hold"}:
+        raise ResearchSafetyError(f"unknown signal mode {signal_mode}")
     missing = [asset.symbol for asset in config.assets if asset.symbol not in series]
     if missing:
         raise ResearchSafetyError(f"missing bars for: {', '.join(missing)}")
+    aux = aux or MarketAux()
 
     perp_assets = [asset for asset in config.assets if asset.product == PRODUCT_PERP]
     cash_assets = [asset for asset in config.assets if asset.product in CASH_PRODUCTS]
     books: dict[str, Book] = {}
     asset_book: dict[str, str] = {}
     if perp_assets:
-        books["perp"] = Book(
-            kind="perp",
-            currency="USDT",
-            cash=config.starting_equity,
-            starting=config.starting_equity,
-            peak=config.starting_equity,
-            max_drawdown_limit=config.risk.max_drawdown_pct,
-        )
+        books["perp"] = _make_book("perp", "USDT", perp_assets, config)
         for asset in perp_assets:
             asset_book[asset.symbol] = "perp"
     if cash_assets:
-        books["cash"] = Book(
-            kind="cash",
-            currency="USD",
-            cash=config.starting_equity,
-            starting=config.starting_equity,
-            peak=config.starting_equity,
-            max_drawdown_limit=config.risk.max_drawdown_pct,
-        )
+        books["cash"] = _make_book("cash", "USD", cash_assets, config)
         for asset in cash_assets:
             asset_book[asset.symbol] = "cash"
     coverage = {asset.symbol: _coverage(series[asset.symbol]) for asset in config.assets}
@@ -1216,12 +1454,18 @@ def run_research(config: ResearchConfig, series: dict[str, list[ResearchBar]]) -
     rejections: list[dict[str, Any]] = []
     events: list[tuple[datetime, int, int]] = []
     assets = list(config.assets)
+    funding_buckets = {
+        asset.symbol: _bucket_by_bar(series[asset.symbol], list(aux.funding.get(asset.symbol, [])))
+        for asset in assets
+    }
     for asset_index, asset in enumerate(assets):
         for bar_index, bar in enumerate(series[asset.symbol]):
             events.append((bar.timestamp, asset_index, bar_index))
     events.sort(key=lambda item: (item[0], item[1], item[2]))
     for _timestamp, asset_index, bar_index in events:
         asset = assets[asset_index]
+        bucket = funding_buckets[asset.symbol][bar_index]
+        bar = series[asset.symbol][bar_index]
         _process_bar(
             books[asset_book[asset.symbol]],
             asset,
@@ -1232,13 +1476,22 @@ def run_research(config: ResearchConfig, series: dict[str, list[ResearchBar]]) -
             config.session,
             fills,
             rejections,
+            signal_mode=signal_mode,
+            open_funding=[item for item in bucket if item.timestamp == bar.timestamp],
+            later_funding=[item for item in bucket if item.timestamp > bar.timestamp],
+            dividends=aux.dividends.get(asset.symbol, []),
+            splits=aux.splits.get(asset.symbol, []),
+            use_bar_funding=not bool(aux.funding.get(asset.symbol)),
         )
 
     pending: list[dict[str, Any]] = []
     for asset in assets:
         bars = series[asset.symbol]
         closes = [bar.close for bar in bars]
-        side = desired_side(closes, config.strategy, allow_short=asset.allow_short)
+        if signal_mode == "buy_and_hold":
+            side = "long"
+        else:
+            side = desired_side(closes, config.strategy, allow_short=asset.allow_short)
         position = books[asset_book[asset.symbol]].positions.get(asset.symbol)
         current = position.side if position else "flat"
         if side is not None and side != current:
@@ -1263,7 +1516,21 @@ def run_research(config: ResearchConfig, series: dict[str, list[ResearchBar]]) -
                 asset.symbol,
             )
 
+    for asset in assets:
+        if asset.product in CASH_PRODUCTS:
+            continue
+        has_aux = bool(aux.funding.get(asset.symbol))
+        if not has_aux:
+            continue
+        book = books[asset_book[asset.symbol]]
+        if book.funding_mark_missing or not aux.funding_complete.get(asset.symbol, False):
+            coverage[asset.symbol]["funding_status"] = "incomplete"
+        else:
+            coverage[asset.symbol]["funding_status"] = "provided_series"
+
     report = _build_report(config, books, assets, asset_book, series, coverage, fills, rejections, pending)
+    report["signal_mode"] = signal_mode
+    report["leverage_changes_sent"] = 0
     return report
 
 
@@ -1273,7 +1540,7 @@ def _book_funding_status(book: Book, assets: list[AssetSpec], coverage: dict[str
     statuses = {coverage[asset.symbol]["funding_status"] for asset in assets if asset.product == PRODUCT_PERP}
     if statuses == {"provided_series"}:
         return "provided_series"
-    if "provided_series" in statuses and "unavailable" in statuses:
+    if "incomplete" in statuses or ("provided_series" in statuses and "unavailable" in statuses):
         return "incomplete"
     return "unavailable"
 
@@ -1335,7 +1602,11 @@ def _build_report(
                 "net_pnl": _dec_str(booked),
                 "net_pnl_includes_funding": funding_status in {"provided_series", "not_applicable"},
                 "fees": _dec_str(book.fees),
-                "funding": _funding_field(funding_status, book.funding_pnl),
+                "funding": (
+                    _dec_str(book.funding_pnl)
+                    if funding_status == "provided_series" or (funding_status == "incomplete" and book.funding_events)
+                    else None
+                ),
                 "funding_status": funding_status,
                 "slippage_cost": _dec_str(book.slippage),
                 "slippage_already_in_net_pnl": True,
@@ -1381,6 +1652,32 @@ def _build_report(
         else:
             mark_status = coverage[asset.symbol]["mark_status"]
             index_status = coverage[asset.symbol]["index_status"]
+        allocated = config.starting_equity * asset.weight if asset.weight is not None else None
+        in_sample = None
+        out_sample = None
+        if config.sample_split is not None:
+            in_sample = _sample_block(
+                book,
+                fills,
+                symbols,
+                start=None,
+                end=config.sample_split,
+                funding_status=funding_status,
+                period_start=bars[0].timestamp if bars[0].timestamp < config.sample_split else None,
+                period_end=config.sample_split,
+                include_drawdown=False,
+            )
+            out_sample = _sample_block(
+                book,
+                fills,
+                symbols,
+                start=config.sample_split,
+                end=None,
+                funding_status=funding_status,
+                period_start=config.sample_split,
+                period_end=bars[-1].timestamp if bars[-1].timestamp >= config.sample_split else None,
+                include_drawdown=False,
+            )
         asset_reports.append(
             {
                 "symbol": asset.symbol,
@@ -1388,6 +1685,8 @@ def _build_report(
                 "quote_asset": asset.quote_asset,
                 "leverage": asset.leverage,
                 "allow_short": asset.allow_short,
+                "weight": _dec_str(asset.weight) if asset.weight is not None else None,
+                "allocated_starting_equity": _dec_str(allocated) if allocated is not None else None,
                 "fee_bps": _dec_str(asset.fee_bps),
                 "slippage_bps": _dec_str(asset.slippage_bps),
                 "sample_period": {"start": _iso(bars[0].timestamp), "end": _iso(bars[-1].timestamp)},
@@ -1407,6 +1706,8 @@ def _build_report(
                     period_end=bars[-1].timestamp,
                     include_drawdown=False,
                 ),
+                "in_sample": in_sample,
+                "out_of_sample": out_sample,
             }
         )
 
@@ -1416,6 +1717,7 @@ def _build_report(
         "paper_only": True,
         "live_trading": False,
         "orders_sent": 0,
+        "leverage_changes_sent": 0,
         "strategy": config.strategy.name,
         "data_label": config.data_label,
         "profitability_claim": "none",
@@ -1516,20 +1818,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = load_config(args.config)
         if args.mode:
-            config = ResearchConfig(
-                mode=args.mode,
-                data_label=config.data_label,
-                starting_equity=config.starting_equity,
-                sample_split=config.sample_split,
-                strategy=config.strategy,
-                risk=config.risk,
-                session=config.session,
-                assets=config.assets,
-                report_path=config.report_path,
-                fills_path=config.fills_path,
-                notes=config.notes,
-                config_dir=config.config_dir,
-            )
+            config = replace(config, mode=args.mode)
+        if config.study or any(asset.source_type for asset in config.assets):
+            from research_data import format_study, run_historical_study, write_study_files
+
+            study = run_historical_study(config)
+            write_study_files(study, args.report or config.report_path, args.fills or config.fills_path)
+            print(format_study(study))
+            return 0
         report = run_research(config, load_series(config))
         write_outputs(report, args.report or config.report_path, args.fills or config.fills_path)
     except ResearchSafetyError as exc:

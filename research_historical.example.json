@@ -1,0 +1,103 @@
+{
+  "mode": "backtest",
+  "study": true,
+  "parameters_locked": true,
+  "data_label": "historical_public_archive",
+  "starting_equity": "10000",
+  "sample_split_timestamp": "2024-01-01T00:00:00Z",
+  "stress_multiplier": "2",
+  "report_path": "artifacts/research/historical-study.json",
+  "fills_path": "artifacts/research/historical-fills.jsonl",
+  "notes": [
+    "参数在下载和样本外计算之前写死：20/50 日均线、20 日动量、8% 止损、每切片 1% 风险。没有用 2024 年以后的结果改这些数字。",
+    "每个账本起始资金 10000。BTC 单独占永续账本；AAPL/SPY/QQQ 按权重分现金账本，不能互相占用现金。",
+    "样本外从 2024-01-01 起，到公开归档里同时有 K 线和资金费的最后完整月份。",
+    "费用和滑点是假设，不是账户成交回报。压力情形把同一组费用和滑点乘以 2。"
+  ],
+  "strategy": {
+    "name": "baseline_sma_momentum",
+    "fast_window": 20,
+    "slow_window": 50,
+    "momentum_window": 20,
+    "momentum_threshold": "0",
+    "stop_pct": "0.08"
+  },
+  "risk": {
+    "risk_per_trade_pct": "0.01",
+    "max_position_pct": "1",
+    "max_drawdown_pct": "0.30",
+    "max_concurrent_positions": 3
+  },
+  "costs": {
+    "fee_bps": "5",
+    "slippage_bps": "5"
+  },
+  "perp": {
+    "leverage": 2,
+    "maintenance_margin_rate": "0.004"
+  },
+  "equity_session": {
+    "timezone": "America/New_York",
+    "open": "09:30",
+    "close": "16:00"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "product": "binance_usdt_perp",
+      "quote_asset": "USDT",
+      "weight": "1",
+      "leverage": 2,
+      "fee_bps": "5",
+      "slippage_bps": "2",
+      "source": {
+        "type": "binance_vision_um",
+        "interval": "1d",
+        "start": "2020-01-01",
+        "end": "2026-10-31"
+      }
+    },
+    {
+      "symbol": "AAPL",
+      "product": "us_cash_equity",
+      "quote_asset": "USD",
+      "weight": "0.3333333334",
+      "fee_bps": "0",
+      "slippage_bps": "5",
+      "source": {
+        "type": "yahoo_chart",
+        "interval": "1d",
+        "start": "2020-01-01",
+        "end": "2026-10-31"
+      }
+    },
+    {
+      "symbol": "SPY",
+      "product": "us_cash_etf",
+      "quote_asset": "USD",
+      "weight": "0.3333333333",
+      "fee_bps": "0",
+      "slippage_bps": "5",
+      "source": {
+        "type": "yahoo_chart",
+        "interval": "1d",
+        "start": "2020-01-01",
+        "end": "2026-10-31"
+      }
+    },
+    {
+      "symbol": "QQQ",
+      "product": "us_cash_etf",
+      "quote_asset": "USD",
+      "weight": "0.3333333333",
+      "fee_bps": "0",
+      "slippage_bps": "5",
+      "source": {
+        "type": "yahoo_chart",
+        "interval": "1d",
+        "start": "2020-01-01",
+        "end": "2026-10-31"
+      }
+    }
+  ]
+}
