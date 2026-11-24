@@ -201,80 +201,150 @@ def cmd_start(
     )
     for sleeve in portfolio["symbols"].values():
         sleeve["running"] = True
+        sleeve["feed_down"] = False
+        sleeve.setdefault("forward_fills", 0)
     portfolio["running"] = True
+    portfolio["orders_sent"] = 0
     save_state(state_path, portfolio)
-    mark_url = config["feed"]["mark_kline_url"]
-    book_url = config["feed"]["book_url"]
-    mark_sock = feed_factory(mark_url) if feed_factory else PublicUmSocket(mark_url)
-    book_sock = feed_factory(book_url) if feed_factory else PublicUmSocket(book_url)
-    stopping = {"flag": False}
+    factory = feed_factory or (lambda url: PublicUmSocket(url))
+    from paper_forward import _next_feed_item, _reconnect_if_stale, _supervisor
 
-    def _handle(_signum: int, _frame: Any) -> None:
-        stopping["flag"] = True
-
+    supervisor = _supervisor(
+        config,
+        stop_path,
+        factory,
+        ("mark_kline", config["feed"]["mark_kline_url"]),
+        ("book", config["feed"]["book_url"]),
+    )
     previous_term = signal.getsignal(signal.SIGTERM)
     previous_int = signal.getsignal(signal.SIGINT)
-    signal.signal(signal.SIGTERM, _handle)
-    signal.signal(signal.SIGINT, _handle)
-    import queue
-
-    messages: queue.Queue[str] = queue.Queue()
-
-    def _pump(sock: Any) -> None:
-        try:
-            sock.connect()
-            while not stopping["flag"] and not stop_path.exists():
-                text = sock.read_text(1.0)
-                if text:
-                    messages.put(text)
-        except Exception as exc:  # noqa: BLE001
-            messages.put(json.dumps({"type": "feed_error", "error": str(exc)}))
-            stopping["flag"] = True
-
-    threads = [
-        threading.Thread(target=_pump, args=(mark_sock,), daemon=True),
-        threading.Thread(target=_pump, args=(book_sock,), daemon=True),
-    ]
-    for thread in threads:
-        thread.start()
+    signal.signal(signal.SIGTERM, lambda _signum, _frame: setattr(supervisor, "stopping", True))
+    signal.signal(signal.SIGINT, lambda _signum, _frame: setattr(supervisor, "stopping", True))
+    supervisor.start()
     last_heartbeat = 0.0
+    from paper_forward import _now_ms
+
+    last_rx = {label: _now_ms() for label, _url in supervisor.streams}
+    last_stale_log = {label: 0 for label in last_rx}
     try:
-        while not stopping["flag"]:
+        while not supervisor.stopping:
             if stop_path.exists():
                 break
-            try:
-                text = messages.get(timeout=1.0)
-            except queue.Empty:
-                text = ""
-            if text:
-                payload = json.loads(text)
-                if payload.get("type") == "feed_error":
-                    append_log(log_path, {"type": "feed_error", "error": payload["error"], "orders_sent": 0})
-                    break
-                for event in apply_alt_event(portfolio, config, payload):
-                    append_log(log_path, event)
-                    if event["type"] in {"fill", "funding", "signal", "rejected", "warning"}:
-                        save_state(state_path, portfolio)
-            now = time.time()
-            if now - last_heartbeat >= int(config.get("heartbeat_seconds", 30)):
-                portfolio["heartbeat_ms"] = int(time.time() * 1000)
-                append_log(log_path, {"type": "heartbeat", "portfolio": PORTFOLIO, "orders_sent": 0})
+            item = _next_feed_item(supervisor)
+            if item is not None:
+                _handle_alt_feed_item(item, portfolio, config, log_path, state_path, last_rx)
+            _reconnect_if_stale(
+                supervisor,
+                config,
+                last_rx,
+                last_stale_log,
+                log_path,
+                lambda: _mark_sleeves_down(portfolio),
+            )
+            if time.time() - last_heartbeat >= int(config.get("heartbeat_seconds", 30)):
+                now_ms = _now_ms()
+                portfolio["heartbeat_ms"] = now_ms
+                for sleeve in portfolio["symbols"].values():
+                    sleeve["heartbeat_ms"] = now_ms
+                append_log(log_path, portfolio_status(portfolio, config, now_ms) | {"type": "heartbeat"})
                 save_state(state_path, portfolio)
-                last_heartbeat = now
+                last_heartbeat = time.time()
     finally:
-        stopping["flag"] = True
+        supervisor.stop()
         portfolio["running"] = False
         portfolio["orders_sent"] = 0
         save_state(state_path, portfolio)
-        append_log(log_path, {"type": "stopped", "orders_sent": 0})
-        mark_sock.close()
-        book_sock.close()
-        for thread in threads:
-            thread.join(timeout=2)
+        from paper_forward import _iso
+
+        append_log(log_path, {"type": "stopped", "orders_sent": 0, "ts": _iso(_now_ms())})
         signal.signal(signal.SIGTERM, previous_term)
         signal.signal(signal.SIGINT, previous_int)
     print(json.dumps({"stopped": True, "orders_sent": 0, "portfolio": PORTFOLIO, "state": str(state_path)}, ensure_ascii=False))
     return 0
+
+
+def _mark_sleeves_down(portfolio: dict[str, Any]) -> None:
+    for sleeve in portfolio["symbols"].values():
+        sleeve["feed_down"] = True
+
+
+def _handle_alt_feed_item(item, portfolio, config, log_path, state_path, last_rx) -> None:
+    from paper_forward import _iso, _now_ms
+
+    if item["type"] in {"feed_error", "feed_disconnect", "feed_reconnect"}:
+        append_log(log_path, item)
+        if item["type"] != "feed_reconnect":
+            _mark_sleeves_down(portfolio)
+        return
+    if item["type"] != "raw":
+        return
+    last_rx[item["stream"]] = _now_ms()
+    try:
+        payload = json.loads(item["text"])
+    except json.JSONDecodeError as exc:
+        append_log(
+            log_path,
+            {"type": "feed_error", "stream": item["stream"], "error": f"JSONDecodeError: {exc}", "ts": _iso(_now_ms()), "orders_sent": 0},
+        )
+        return
+    data = payload.get("data", payload) if isinstance(payload, dict) else {}
+    quote_symbol = str((data or {}).get("s") or "").upper()
+    if (data or {}).get("e") in {"markPriceUpdate", "bookTicker"} and quote_symbol in portfolio["symbols"]:
+        portfolio["symbols"][quote_symbol]["feed_down"] = False
+    try:
+        events = apply_alt_event(portfolio, config, payload)
+    except PaperForwardError as exc:
+        append_log(log_path, {"type": "feed_error", "stream": item["stream"], "error": f"PaperForwardError: {exc}", "ts": _iso(_now_ms()), "orders_sent": 0})
+        return
+    for event in events:
+        event["ts"] = _iso(_now_ms())
+        append_log(log_path, event)
+        sleeve = portfolio["symbols"].get(event.get("symbol"))
+        if sleeve is not None and event["type"] == "fill":
+            sleeve["forward_fills"] = int(sleeve.get("forward_fills") or 0) + 1
+        if event["type"] in {"fill", "funding", "signal", "rejected", "warning"}:
+            save_state(state_path, portfolio)
+
+
+def portfolio_status(portfolio: dict[str, Any], config: dict[str, Any], now_ms: int | None = None) -> dict[str, Any]:
+    from paper_forward import _iso, _now_ms, status_report
+
+    now_ms = _now_ms() if now_ms is None else now_ms
+    symbols: dict[str, Any] = {}
+    processes = []
+    for symbol, sleeve in portfolio["symbols"].items():
+        report_state = sleeve
+        if sleeve.get("heartbeat_ms") is None and portfolio.get("heartbeat_ms") is not None:
+            report_state = dict(sleeve)
+            report_state["heartbeat_ms"] = portfolio["heartbeat_ms"]
+        report = status_report(report_state, config, now_ms)
+        processes.append(report["process"])
+        symbols[symbol] = {
+            "process": report["process"],
+            "heartbeat_time": report["heartbeat_time"],
+            "last_mark_time": report["last_mark_time"],
+            "mark": (sleeve.get("last_mark") or {}).get("price"),
+            "mark_equity": report["mark_equity"],
+            "cash": sleeve.get("cash"),
+            "position": sleeve.get("position"),
+            "forward_fills": int(sleeve.get("forward_fills") or 0),
+            "valuation": report["valuation"],
+            "feed_down": bool(sleeve.get("feed_down")),
+        }
+    if any(item == "stale" for item in processes):
+        overall = "stale"
+    elif processes and all(item == "heartbeat_fresh" for item in processes):
+        overall = "heartbeat_fresh"
+    else:
+        overall = "not_running"
+    return {
+        "process": overall,
+        "portfolio": PORTFOLIO,
+        "orders_sent": 0,
+        "ts": _iso(now_ms),
+        "heartbeat_time": _iso(portfolio.get("heartbeat_ms")),
+        "symbols": symbols,
+    }
 
 
 def dispatch(command: str, config: dict[str, Any]) -> int:
@@ -289,7 +359,11 @@ def dispatch(command: str, config: dict[str, Any]) -> int:
             print(json.dumps({"process": "not_started", "portfolio": PORTFOLIO, "orders_sent": 0}, ensure_ascii=False))
             return 0
         payload = load_portfolio_state(state_path, config)
-        print(json.dumps({"process": "recorded", "portfolio": PORTFOLIO, "orders_sent": 0, "running": payload.get("running")}, ensure_ascii=False))
+        if stop_path.exists():
+            payload["running"] = False
+            for sleeve in payload["symbols"].values():
+                sleeve["running"] = False
+        print(json.dumps(portfolio_status(payload, config), ensure_ascii=False, indent=2))
         return 0
     if command == "preflight":
         print(json.dumps({"ok": False, "blocker": "use start on the deployment host; this check does not open orders", "orders_sent": 0}, ensure_ascii=False))

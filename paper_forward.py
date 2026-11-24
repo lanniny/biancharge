@@ -310,6 +310,8 @@ def valuation(state: dict[str, Any], now_ms: int, config: dict[str, Any]) -> str
 
 
 def entries_blocked(state: dict[str, Any], now_ms: int, config: dict[str, Any]) -> str | None:
+    if state.get("feed_down"):
+        return "feed_down"
     label = valuation(state, now_ms, config)
     if label != "fresh":
         return label
@@ -862,11 +864,13 @@ def status_report(state: dict[str, Any], config: dict[str, Any], now_ms: int | N
     fresh_for = int(config.get("heartbeat_seconds", 30)) * 2 * 1000
     running = bool(state.get("running")) and heartbeat is not None and now_ms - int(heartbeat) <= fresh_for
     equity = mark_equity(state)
+    market = _market_process(state, config, now_ms, running)
     return {
-        "process": "heartbeat_fresh" if running else "not_running",
+        "process": market,
+        "ts": _iso(now_ms),
         "paper_only": True,
         "orders_sent": 0,
-        "symbol": SYMBOL,
+        "symbol": state.get("symbol") or SYMBOL,
         "product": PRODUCT,
         "source": state.get("source"),
         "valuation": valuation(state, now_ms, config),
@@ -880,8 +884,25 @@ def status_report(state: dict[str, Any], config: dict[str, Any], now_ms: int | N
         "last_mark_time": _iso((state.get("last_mark") or {}).get("event_ms")),
         "last_closed_bar_open": _iso((state.get("closed_bars") or [{}])[-1].get("open_ms") if state.get("closed_bars") else None),
         "heartbeat_time": _iso(heartbeat),
+        "forward_fills": int(state.get("forward_fills") or 0),
+        "feed_down": bool(state.get("feed_down")),
         "forward_fills_are_not_historical_backfill": True,
     }
+
+
+def _market_process(state: dict[str, Any], config: dict[str, Any], now_ms: int, running: bool) -> str:
+    """A live heartbeat with an old quote is stale, not fresh."""
+    if not running:
+        return "not_running"
+    if state.get("feed_down"):
+        return "stale"
+    mark_ms = (state.get("last_mark") or {}).get("event_ms")
+    if mark_ms is None or now_ms - int(mark_ms) > int(config.get("stale_mark_seconds", 30)) * 1000:
+        return "stale"
+    book_ms = (state.get("last_book") or {}).get("event_ms")
+    if book_ms is not None and now_ms - int(book_ms) > int(config.get("stale_book_seconds", 15)) * 1000:
+        return "stale"
+    return "heartbeat_fresh"
 
 
 def _paths(config: dict[str, Any]) -> tuple[Path, Path, Path]:
@@ -985,17 +1006,25 @@ def cmd_preflight(config: dict[str, Any]) -> int:
     return 0 if report["ok"] else 2
 
 
-def _bars_from_kline_zip(payload: bytes, today: date, interval: str = "1d") -> list[dict[str, Any]]:
+def _bars_from_kline_zip(payload: bytes, today: date, interval: str = "1d", now: datetime | None = None) -> list[dict[str, Any]]:
     width = 86_400_000 if interval == "1d" else 4 * 60 * 60 * 1000
+    now_ms = None if now is None else int(now.timestamp() * 1000)
     parsed: list[dict[str, Any]] = []
     for row in parse_vision_kline_csv(zip_csv_text(payload)):
         open_time = row["timestamp"]
-        if not isinstance(open_time, datetime) or open_time.date() >= today:
+        if not isinstance(open_time, datetime):
             continue
         open_ms = int(open_time.timestamp() * 1000)
+        close_ms = open_ms + width - 1
+        if interval == "4h":
+            # Keep today's bars once they have closed. The open bar stays out.
+            if now_ms is None or close_ms >= now_ms:
+                continue
+        elif open_time.date() >= today:
+            continue
         item = {
             "open_ms": open_ms,
-            "close_ms": open_ms + width - 1,
+            "close_ms": close_ms,
             "close": row["close"],
         }
         if interval == "4h":
@@ -1041,18 +1070,19 @@ def load_warmup_bars(
         url = f"https://data.binance.vision/data/futures/um/monthly/klines/{symbol}/{interval}/{symbol}-{interval}-{stamp}.zip"
         try:
             payload, _meta = read(url, cache)
-            bars.extend(_bars_from_kline_zip(payload, today, interval))
+            bars.extend(_bars_from_kline_zip(payload, today, interval, now))
         except (ResearchSafetyError, OSError, ValueError):
             continue
     day = date(today.year, today.month, 1)
-    while day < today:
+    last_day = today if interval == "4h" else today - timedelta(days=1)
+    while day <= last_day:
         url = (
             f"https://data.binance.vision/data/futures/um/daily/klines/{symbol}/{interval}/"
             f"{symbol}-{interval}-{day.isoformat()}.zip"
         )
         try:
             payload, _meta = read(url, cache)
-            bars.extend(_bars_from_kline_zip(payload, today, interval))
+            bars.extend(_bars_from_kline_zip(payload, today, interval, now))
         except (ResearchSafetyError, OSError, ValueError):
             pass
         day += timedelta(days=1)
@@ -1062,6 +1092,103 @@ def load_warmup_bars(
     ordered = [deduped[key] for key in sorted(deduped)]
     keep = 1000 if interval == "4h" else 120
     return ordered[-keep:]
+
+
+def _supervisor(config: dict[str, Any], stop_path: Path, factory: Callable[[str], Any], *streams: tuple[str, str]):
+    from paper_feed import FeedSupervisor
+
+    return FeedSupervisor(
+        list(streams),
+        factory,
+        stop_path,
+        initial_backoff=float(config.get("reconnect_initial_seconds", 1)),
+        max_backoff=float(config.get("reconnect_max_seconds", 60)),
+    )
+
+
+def _next_feed_item(supervisor: Any) -> dict[str, Any] | None:
+    try:
+        return supervisor.messages.get(timeout=0.5)
+    except Exception:
+        return None
+
+
+def _mark_feed_down(state: dict[str, Any]) -> None:
+    state["feed_down"] = True
+
+
+def _handle_btc_feed_item(
+    item: dict[str, Any],
+    state: dict[str, Any],
+    config: dict[str, Any],
+    log_path: Path,
+    state_path: Path,
+    last_rx: dict[str, int],
+) -> None:
+    if item["type"] in {"feed_error", "feed_disconnect", "feed_reconnect"}:
+        append_log(log_path, item)
+        if item["type"] != "feed_reconnect":
+            state["feed_down"] = True
+        return
+    if item["type"] != "raw":
+        return
+    last_rx[item["stream"]] = _now_ms()
+    try:
+        payload = json.loads(item["text"])
+    except json.JSONDecodeError as exc:
+        append_log(log_path, {"type": "feed_error", "stream": item["stream"], "error": f"JSONDecodeError: {exc}", "ts": _iso(_now_ms()), "orders_sent": 0})
+        return
+    try:
+        events = apply_feed_event(state, config, payload)
+    except PaperForwardError as exc:
+        append_log(log_path, {"type": "feed_error", "stream": item["stream"], "error": f"PaperForwardError: {exc}", "ts": _iso(_now_ms()), "orders_sent": 0})
+        return
+    for event in events:
+        event["source"] = state["source"]
+        event["orders_sent"] = 0
+        event["ts"] = _iso(_now_ms())
+        append_log(log_path, event)
+        if event["type"] == "fill":
+            state["forward_fills"] = int(state.get("forward_fills") or 0) + 1
+        if event["type"] in {"fill", "funding", "signal", "rejected", "warning"}:
+            save_state(state_path, state)
+    if payload.get("e") in {"markPriceUpdate", "bookTicker"} or payload.get("data", {}).get("e") in {"markPriceUpdate", "bookTicker"}:
+        state["feed_down"] = False
+
+
+def _reconnect_if_stale(
+    supervisor: Any,
+    config: dict[str, Any],
+    last_rx: dict[str, int],
+    last_stale_log: dict[str, int],
+    log_path: Path,
+    mark_down: Callable[[], None],
+) -> None:
+    now = _now_ms()
+    limits = {
+        "mark_kline": int(config.get("stale_mark_seconds", 30)),
+        "book": int(config.get("stale_book_seconds", 15)),
+    }
+    for label in last_rx:
+        limit_ms = limits.get(label, int(config.get("stale_mark_seconds", 30))) * 1000
+        if now - last_rx[label] <= limit_ms:
+            continue
+        if now - last_stale_log[label] <= limit_ms:
+            continue
+        last_stale_log[label] = now
+        mark_down()
+        append_log(
+            log_path,
+            {
+                "type": "feed_disconnect",
+                "stream": label,
+                "reason": "stale_quote",
+                "last_rx": _iso(last_rx[label]),
+                "ts": _iso(now),
+                "orders_sent": 0,
+            },
+        )
+        supervisor.request_reconnect(label)
 
 
 def cmd_start(
@@ -1093,80 +1220,40 @@ def cmd_start(
             },
         )
     state["running"] = True
+    state["feed_down"] = False
+    state.setdefault("forward_fills", 0)
     save_state(state_path, state)
-    mark_url = config["feed"]["mark_kline_url"]
-    book_url = config["feed"]["book_url"]
-    mark_sock = feed_factory(mark_url) if feed_factory else PublicUmSocket(mark_url)
-    book_sock = feed_factory(book_url) if feed_factory else PublicUmSocket(book_url)
-    stopping = {"flag": False}
-
-    def _handle(_signum: int, _frame: Any) -> None:
-        stopping["flag"] = True
-
+    factory = feed_factory or (lambda url: PublicUmSocket(url))
+    supervisor = _supervisor(config, stop_path, factory, ("mark_kline", config["feed"]["mark_kline_url"]), ("book", config["feed"]["book_url"]))
     previous_term = signal.getsignal(signal.SIGTERM)
     previous_int = signal.getsignal(signal.SIGINT)
-    signal.signal(signal.SIGTERM, _handle)
-    signal.signal(signal.SIGINT, _handle)
-    import queue
-    import threading
-
-    messages: queue.Queue[tuple[str, str]] = queue.Queue()
-
-    def _pump(label: str, sock: PublicUmSocket) -> None:
-        try:
-            sock.connect()
-            while not stopping["flag"] and not stop_path.exists():
-                text = sock.read_text(1.0)
-                if text:
-                    messages.put((label, text))
-        except Exception as exc:  # noqa: BLE001 - surface the feed failure and stop
-            messages.put((label, json.dumps({"type": "feed_error", "error": str(exc)})))
-            stopping["flag"] = True
-
-    threads = [
-        threading.Thread(target=_pump, args=("mark_kline", mark_sock), daemon=True),
-        threading.Thread(target=_pump, args=("book", book_sock), daemon=True),
-    ]
-    for thread in threads:
-        thread.start()
+    signal.signal(signal.SIGTERM, lambda _signum, _frame: setattr(supervisor, "stopping", True))
+    signal.signal(signal.SIGINT, lambda _signum, _frame: setattr(supervisor, "stopping", True))
+    supervisor.start()
     last_heartbeat = 0.0
+    last_rx = {label: _now_ms() for label, _url in supervisor.streams}
+    last_stale_log = {label: 0 for label in last_rx}
     try:
-        while not stopping["flag"]:
+        while not supervisor.stopping:
             if stop_path.exists():
                 break
-            try:
-                _label, text = messages.get(timeout=1.0)
-            except queue.Empty:
-                text = ""
-            if text:
-                payload = json.loads(text)
-                if payload.get("type") == "feed_error":
-                    append_log(log_path, {"type": "feed_error", "error": payload["error"], "orders_sent": 0})
-                    break
-                for event in apply_feed_event(state, config, payload):
-                    event["source"] = state["source"]
-                    event["orders_sent"] = 0
-                    append_log(log_path, event)
-                    if event["type"] in {"fill", "funding", "signal", "rejected", "warning"}:
-                        save_state(state_path, state)
-            now = time.time()
-            if now - last_heartbeat >= int(config.get("heartbeat_seconds", 30)):
+            item = _next_feed_item(supervisor)
+            if item is not None:
+                _handle_btc_feed_item(item, state, config, log_path, state_path, last_rx)
+            _reconnect_if_stale(supervisor, config, last_rx, last_stale_log, log_path, lambda: _mark_feed_down(state))
+            if time.time() - last_heartbeat >= int(config.get("heartbeat_seconds", 30)):
                 state["heartbeat_ms"] = _now_ms()
                 beat = status_report(state, config)
                 beat["type"] = "heartbeat"
                 append_log(log_path, beat)
                 save_state(state_path, state)
-                last_heartbeat = now
+                last_heartbeat = time.time()
     finally:
-        stopping["flag"] = True
+        supervisor.stop()
         state["running"] = False
         state["heartbeat_ms"] = _now_ms()
         save_state(state_path, state)
         append_log(log_path, {"type": "stopped", "orders_sent": 0, "ts": _iso(state["heartbeat_ms"])})
-        mark_sock.close()
-        book_sock.close()
-        for thread in threads:
-            thread.join(timeout=2)
         signal.signal(signal.SIGTERM, previous_term)
         signal.signal(signal.SIGINT, previous_int)
     print(json.dumps({"stopped": True, "orders_sent": 0, "state": str(state_path)}, ensure_ascii=False))

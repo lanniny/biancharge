@@ -30,7 +30,17 @@ python paper_forward.py stop --config paper_forward.example.json
 
 FAPI REST 若返回 HTTP 451，不要用代理绕过，也不要把现货行情当成永续。预检失败就不要 start。
 
-状态和日志写在 `paper-state/`。停止命令只写 stop 文件，让正在运行的进程自己退出。
+状态和日志写在 `paper-state/`。停止命令只写 stop 文件，让正在运行的进程自己退出。行情套接字断开或时间戳超过 `stale_mark_seconds` / `stale_book_seconds` 时，进程记一条带时间戳的 `feed_error` 或 `feed_disconnect`，按 1、2、4 秒退避重连，最多 60 秒。单次行情异常不会退出。断流期间不开新仓。`status` 在行情过期时显示 `stale`，不会把过期行情报成 `heartbeat_fresh`。
+
+## 常驻机器切换
+
+旧的 BTC 1 倍进程还在用更早的包。新包同时带 `paper_forward.example.json` 和 `paper_forward.alts.example.json`。不要删现有状态文件。
+
+1. 在旧进程的目录执行 `python paper_forward.py stop --config paper_forward.example.json`，确认那个进程已经退出。保留 `paper-state/btcusdt-paper-state.json`。
+2. 把新包解压到新目录，或只替换代码。状态目录继续用原来的 `paper-state/`。
+3. 用同一状态文件启动新的 BTC 纸面：`python paper_forward.py start --config paper_forward.example.json`。空仓和现金 10000 会原样读入。
+4. 另开一个进程启动四币纸面：`python paper_forward.py start --config paper_forward.alts.example.json`。它写入 `paper-state/alt-slow-momentum-state.json`，不读 BTC 的状态。
+5. `python paper_forward.py status --config paper_forward.example.json` 和 `--config paper_forward.alts.example.json`。行情不更新时进程应仍在，状态是 `stale`。
 
 正在运行的进程应继续使用 `paper_forward.example.json`（固定 1 倍）。`paper_forward.dynamic.example.json` 是以后可选的纸面配置：信号仍是同一套日线规则，杠杆由风险预算和强平缓冲决定，不会为了用满 50 倍而放大仓位。重启前要停掉旧进程。已有持仓的保证金和杠杆不会被改写。
 

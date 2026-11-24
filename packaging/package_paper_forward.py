@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_FILES = (
     "paper_forward.py",
+    "paper_feed.py",
     "paper_ws.py",
     "research_backtest.py",
     "research_data.py",
@@ -38,6 +39,10 @@ def build_archive(destination: Path, root: Path | None = None) -> Path:
             data = path.read_bytes()
             manifest_lines.append(f"{hashlib.sha256(data).hexdigest()}  {path.name}")
             archive.add(path, arcname=f"paper-forward-btcusdt/{path.name}")
+        for path in sorted((source / "tests").glob("test_*.py")):
+            data = path.read_bytes()
+            manifest_lines.append(f"{hashlib.sha256(data).hexdigest()}  tests/{path.name}")
+            archive.add(path, arcname=f"paper-forward-btcusdt/tests/{path.name}")
         manifest = ("\n".join(manifest_lines) + "\n").encode("utf-8")
         info = tarfile.TarInfo("paper-forward-btcusdt/MANIFEST.sha256")
         info.size = len(manifest)
