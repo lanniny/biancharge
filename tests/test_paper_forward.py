@@ -164,6 +164,7 @@ class ForwardAccountingTests(unittest.TestCase):
         config = _config()
         self.assertNotIn("allow_short", config["strategy"])
         self.assertEqual(config["strategy"]["name"], "baseline_sma_momentum")
+        self.assertFalse((ROOT / "paper_forward.swing.example.json").exists())
         state = new_state(config)
         import paper_forward
 
@@ -194,6 +195,40 @@ class ForwardAccountingTests(unittest.TestCase):
         )
         self.assertEqual(stopped[-1]["action"], "close_short")
         self.assertLess(Decimal(stopped[-1]["realized_price_pnl"]), 0)
+
+    def test_round2_preset_can_load_only_with_a_separate_state_file(self) -> None:
+        from research_swing_study import _public_preset
+        from strategy_candidates import ROUND2_GRIDS
+
+        preset = _public_preset(ROUND2_GRIDS["tsmom_slow_4h"][1])
+        self.assertIs(preset["allow_short"], True)
+        payload = {
+            "mode": "paper",
+            "symbol": "BTCUSDT",
+            "product": "binance_usdt_perp",
+            "leverage_policy": "risk_bounded_dynamic",
+            "max_contract_leverage": 50,
+            "bar_interval": "4h",
+            "state_path": "paper-state/btcusdt-swing-state.json",
+            "log_path": "paper-state/btcusdt-swing.jsonl",
+            "stop_path": "paper-state/btcusdt-swing.stop",
+            "strategy": {"name": preset["name"], "preset": preset},
+            "feed": {
+                "mark_kline_url": "wss://fstream.binance.com/market/stream?streams=btcusdt@markPrice@1s/btcusdt@kline_4h",
+                "book_url": "wss://fstream.binance.com/ws/btcusdt@bookTicker",
+            },
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(payload, handle)
+            path = handle.name
+        loaded = load_paper_config(path)
+        self.assertEqual(loaded["strategy"]["preset"]["filter"], "daily_long_weekly_short")
+        payload["state_path"] = "paper-state/btcusdt-paper-state.json"
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(payload, handle)
+            blocked = handle.name
+        with self.assertRaises(PaperForwardError):
+            load_paper_config(blocked)
 
     def test_missing_funding_rate_is_not_zero(self) -> None:
         config = _config()

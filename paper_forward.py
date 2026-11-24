@@ -109,7 +109,9 @@ def load_paper_config(path: str | Path) -> dict[str, Any]:
     if policy not in {"fixed_1x", "risk_bounded_dynamic"}:
         raise PaperForwardError("leverage_policy must be fixed_1x or risk_bounded_dynamic")
     strategy = payload.get("strategy") or {}
-    swing = str(strategy.get("name", "")) in {"atr_breakout_4h", "tsmom_4h", "donchian_trail_4h"}
+    from strategy_candidates import SWING_STRATEGY_NAMES
+
+    swing = str(strategy.get("name", "")) in SWING_STRATEGY_NAMES
     if policy == "fixed_1x":
         if swing:
             raise PaperForwardError("4h long/short paper uses risk_bounded_dynamic; the fixed 1x daily config stays long-only")
@@ -153,7 +155,7 @@ def load_paper_config(path: str | Path) -> dict[str, Any]:
 
 def _validate_swing_config(payload: dict[str, Any]) -> None:
     """A second paper process: long and short, own state files, frozen 4h preset."""
-    from strategy_candidates import SWING_GRIDS
+    from strategy_candidates import SWING_GRIDS, preset_matches
 
     strategy = payload["strategy"]
     name = str(strategy["name"])
@@ -168,28 +170,14 @@ def _validate_swing_config(payload: dict[str, Any]) -> None:
     state_name = Path(str(payload.get("state_path", ""))).name
     if state_name in {"", "btcusdt-paper-state.json"}:
         raise PaperForwardError("swing paper must use its own state file, not the running 1x daily state")
-    matched = False
-    for item in SWING_GRIDS[name]:
-        if set(item) != set(preset):
-            continue
-        same = True
-        for key, value in item.items():
-            raw = preset[key]
-            if isinstance(value, Decimal):
-                same = Decimal(str(raw)) == value
-            else:
-                same = raw == value
-            if not same:
-                break
-        matched = same
-        if matched:
-            break
-    if not matched:
+    if not any(preset_matches(item, preset) for item in SWING_GRIDS[name]):
         raise PaperForwardError("swing preset is not one of the frozen long/short grids")
 
 
 def _is_swing(config: dict[str, Any]) -> bool:
-    return str((config.get("strategy") or {}).get("name", "")) in {"atr_breakout_4h", "tsmom_4h", "donchian_trail_4h"}
+    from strategy_candidates import SWING_STRATEGY_NAMES
+
+    return str((config.get("strategy") or {}).get("name", "")) in SWING_STRATEGY_NAMES
 
 
 def strategy_from(config: dict[str, Any]) -> StrategySpec:
@@ -624,13 +612,9 @@ def on_closed_bar(state: dict[str, Any], config: dict[str, Any], bar: dict[str, 
 
 
 def _swing_signal(state: dict[str, Any], config: dict[str, Any]) -> tuple[str | None, Decimal | None]:
-    from strategy_candidates import SwingBook
+    from strategy_candidates import SwingBook, materialize_preset
 
-    preset = dict(config["strategy"]["preset"])
-    for key in ("atr_multiple",):
-        if key in preset:
-            preset[key] = Decimal(str(preset[key]))
-    book = SwingBook(preset)
+    book = SwingBook(materialize_preset(config["strategy"]["preset"]))
     decision: str | None = None
     fraction: Decimal | None = None
     for bar in state["closed_bars"]:

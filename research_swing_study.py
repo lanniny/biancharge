@@ -18,7 +18,7 @@ from typing import Any
 
 from leverage_policy import MaintenanceModel, plan_leverage
 from research_data import fetch_vision_zip, parse_vision_funding_csv, parse_vision_kline_csv, zip_csv_text
-from strategy_candidates import DONCHIAN_GRID, ATR_BREAKOUT_GRID, TSMOM_GRID, SwingBook
+from strategy_candidates import DONCHIAN_GRID, ATR_BREAKOUT_GRID, ROUND2_GRIDS, TSMOM_GRID, SwingBook
 
 HOLDOUT_START = date(2026, 8, 1)
 ROOT = "https://data.binance.vision/data/futures/um"
@@ -458,7 +458,18 @@ def _score_train(candles, funding, preset, model, fee, slip, extra, risk, equity
     return _metrics(result, equity0, candles[0].ts, train_end)
 
 
-def run_swing_study(config: dict[str, Any]) -> dict[str, Any]:
+def _public_preset(preset: dict) -> dict[str, Any]:
+    def convert(value: Any) -> Any:
+        if isinstance(value, Decimal):
+            return str(value)
+        if isinstance(value, tuple):
+            return [convert(item) for item in value]
+        return value
+
+    return {key: convert(value) for key, value in preset.items()}
+
+
+def run_swing_study(config: dict[str, Any], grids: dict | None = None, iteration: int = 1) -> dict[str, Any]:
     start = date.fromisoformat(config["sample_start"])
     end = date.fromisoformat(config["sample_end"])
     if end < HOLDOUT_START:
@@ -483,7 +494,10 @@ def run_swing_study(config: dict[str, Any]) -> dict[str, Any]:
     risk = Decimal(config["risk_per_trade_pct"])
     extra = Decimal(config["extra_buffer"])
     folds = walk_forward_folds(date(2021, 1, 1), HOLDOUT_START)
-    grids = {"atr_breakout_4h": ATR_BREAKOUT_GRID, "tsmom_4h": TSMOM_GRID, "donchian_trail_4h": DONCHIAN_GRID}
+    if grids is None:
+        grids = {"atr_breakout_4h": ATR_BREAKOUT_GRID, "tsmom_4h": TSMOM_GRID, "donchian_trail_4h": DONCHIAN_GRID}
+    if sum(len(grid) for grid in grids.values()) > 6 and iteration > 1:
+        raise RuntimeError("round 2 is limited to 6 frozen presets")
     for grid in grids.values():
         for preset in grid:
             if preset.get("allow_short") is not True:
@@ -521,7 +535,7 @@ def run_swing_study(config: dict[str, Any]) -> dict[str, Any]:
                     "test_start": str(fold_start),
                     "test_end": str(fold_end),
                     "index": grid.index(preset),
-                    "preset": {key: (str(value) if isinstance(value, Decimal) else value) for key, value in preset.items()},
+                    "preset": _public_preset(preset),
                     "train_sharpe": train_metrics["sharpe"],
                 }
             )
@@ -662,6 +676,14 @@ def run_swing_study(config: dict[str, Any]) -> dict[str, Any]:
     return {
         "paper_only": True,
         "orders_sent": 0,
+        "iteration": iteration,
+        "selection_bias": (
+            "Second pass on the same 2021-01-01 to 2026-08-01 stitched window. "
+            "The slower rules and the choice to drop ATR breakout were made after reading round 1, "
+            "so this window is no longer an untouched holdout."
+            if iteration > 1
+            else "First pass. Parameters were frozen before this run. 2024 onward was already inspected by the earlier daily study."
+        ),
         "selection_rule": {
             "train_metric": "sharpe",
             "min_train_trades": MIN_TRAIN_TRADES,
