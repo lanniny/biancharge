@@ -9,6 +9,7 @@ __pycache__/
 logs/
 approvals/
 data/research-cache/
+paper-state/
 *.pyc
 .env
 .env.*

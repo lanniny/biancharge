@@ -223,6 +223,19 @@ python research_backtest.py --config research_historical.example.json
 
 历史结果可能落后于简单持有。那只说明这组固定规则在这段公开数据上的账本，不是对未来收益的判断。
 
+### BTCUSDT 前向纸面
+
+`paper_forward.py` 是给后续常驻机器用的前向纸面程序，不是上面的离线回放。默认只做 BTCUSDT U 本位永续，虚拟资金 10000 USDT，模拟杠杆 1 倍。信号仍是日线 MA20/50 和 8% 止损。历史日线只预热均线，不记成前向成交。已收盘日线才出信号；成交用信号之后的第一笔新鲜买卖报价，或下一根日线开盘。资金费按 8 小时结算点入账，缺标记或费率时记缺失，不记 0。
+
+```powershell
+python paper_forward.py preflight --config paper_forward.example.json
+python paper_forward.py start --config paper_forward.example.json
+python paper_forward.py status --config paper_forward.example.json
+python paper_forward.py stop --config paper_forward.example.json
+```
+
+`preflight` 只读连接 `wss://fstream.binance.com` 的公开行情。FAPI REST 在开发环境返回 HTTP 451，程序不调用它，也不用代理。打包文件是 `paper-forward-btcusdt.tar.gz`。本仓库的云端检查不能代替常驻机器上的持续纸面进程。
+
 ### 明确限制
 
 - 不模拟期权、CME 期货，也不把现金 ETF 说成合约适配器。
