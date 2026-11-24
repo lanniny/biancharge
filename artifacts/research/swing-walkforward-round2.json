@@ -1,0 +1,986 @@
+{
+  "paper_only": true,
+  "orders_sent": 0,
+  "iteration": 2,
+  "selection_bias": "Second pass on the same 2021-01-01 to 2026-08-01 stitched window. The slower rules and the choice to drop ATR breakout were made after reading round 1, so this window is no longer an untouched holdout.",
+  "selection_rule": {
+    "train_metric": "sharpe",
+    "min_train_trades": 8,
+    "min_stitched_trades": 20,
+    "min_sharpe": "0.5",
+    "max_drawdown": "0.35",
+    "liquidations": 0,
+    "allow_short": true,
+    "stress": "fee_and_slippage_times_2_must_stay_profitable",
+    "reserved_segment": "2026-08-01 onward, scored once after selection"
+  },
+  "provenance": {
+    "bars_4h": 14976,
+    "funding_events": 7488,
+    "missing_trade_months": [],
+    "missing_mark_months": [],
+    "missing_funding_months": 0,
+    "sample_start": "2020-01-01",
+    "sample_end": "2026-10-31",
+    "holdout_start": "2026-08-01"
+  },
+  "families": {
+    "tsmom_slow_4h": {
+      "selections": [
+        {
+          "test_start": "2021-01-01",
+          "test_end": "2021-07-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "2.878079850322564647211433146"
+        },
+        {
+          "test_start": "2021-07-01",
+          "test_end": "2022-01-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "1.579343725155166732842955755"
+        },
+        {
+          "test_start": "2022-01-01",
+          "test_end": "2022-07-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "1.412411324695825298453614598"
+        },
+        {
+          "test_start": "2022-07-01",
+          "test_end": "2023-01-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "1.269045288011138774212970929"
+        },
+        {
+          "test_start": "2023-01-01",
+          "test_end": "2023-07-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "1.020615449572120908458974103"
+        },
+        {
+          "test_start": "2023-07-01",
+          "test_end": "2024-01-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "0.9076305505812198005089311243"
+        },
+        {
+          "test_start": "2024-01-01",
+          "test_end": "2024-07-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "0.8751850190432774297709728065"
+        },
+        {
+          "test_start": "2024-07-01",
+          "test_end": "2025-01-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "0.9456067443210512799050902732"
+        },
+        {
+          "test_start": "2025-01-01",
+          "test_end": "2025-07-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "0.9904280258895799477427673652"
+        },
+        {
+          "test_start": "2025-07-01",
+          "test_end": "2026-01-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "0.9198324535247105279531170878"
+        },
+        {
+          "test_start": "2026-01-01",
+          "test_end": "2026-07-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "0.9303120766571090410559458125"
+        },
+        {
+          "test_start": "2026-07-01",
+          "test_end": "2026-08-01",
+          "index": 1,
+          "preset": {
+            "allow_short": true,
+            "atr_multiple": "3",
+            "weekly_sma": 20,
+            "daily_sma": 50,
+            "confirm_bars": 3,
+            "min_hold_bars": 30,
+            "ema": 180,
+            "lookbacks": [
+              48,
+              180,
+              540
+            ],
+            "weights": [
+              "0.2",
+              "0.3",
+              "0.5"
+            ],
+            "entry": 120,
+            "exit": 40,
+            "name": "tsmom_slow_4h",
+            "filter": "daily_long_weekly_short"
+          },
+          "train_sharpe": "0.9229388676344920252270784560"
+        }
+      ],
+      "walk_forward": {
+        "net_pnl": "2665.29194073916161791792082",
+        "annualized_return": "0.043255490219110381233660989",
+        "max_drawdown": "0.1684529174302159085007414180",
+        "sharpe": "0.4483670606103493815279953432",
+        "fees": "305.8858949299490915990411678",
+        "funding_pnl": "-915.2516465015143511420732312",
+        "funding_missing_events": 12,
+        "funding_status": "incomplete",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {
+          "1": 118
+        },
+        "mean_effective_leverage": "0.2494193404814738689816002272",
+        "trades": 109,
+        "win_rate": "0.2935779816513761467889908257",
+        "payoff_ratio": "3.010539984605628647229872069",
+        "by_side": {
+          "long": {
+            "trades": 51,
+            "net_pnl": "3317.176894816469419572898936"
+          },
+          "short": {
+            "trades": 58,
+            "net_pnl": "-1722.544456118467414511652173"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "236.16194983348628130410112",
+            "max_drawdown": "0.06748939908186566322486328690",
+            "trades": "18",
+            "by_side": {
+              "long": {
+                "trades": 13,
+                "net_pnl": "419.8008241075014495959397650"
+              },
+              "short": {
+                "trades": 5,
+                "net_pnl": "209.9703151458553125185470385"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "-509.151208568429309918849557",
+            "max_drawdown": "0.09578746889064660200234108094",
+            "trades": "22",
+            "by_side": {
+              "long": {
+                "trades": 4,
+                "net_pnl": "-409.0170967712972409960767569"
+              },
+              "short": {
+                "trades": 18,
+                "net_pnl": "-668.6830344868246061021172915"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "226.471200614716899360320971",
+            "max_drawdown": "0.1062681980832377170183342121",
+            "trades": "22",
+            "by_side": {
+              "long": {
+                "trades": 10,
+                "net_pnl": "-12.76493508657850798479082348"
+              },
+              "short": {
+                "trades": 12,
+                "net_pnl": "-857.9295315052453530859251580"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "2241.963088335082648513913991",
+            "max_drawdown": "0.1143595603917583887298689685",
+            "trades": "20",
+            "by_side": {
+              "long": {
+                "trades": 14,
+                "net_pnl": "3146.660071942722251346444429"
+              },
+              "short": {
+                "trades": 6,
+                "net_pnl": "-498.1078536195554665056984155"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "660.32897271426130159820716",
+            "max_drawdown": "0.05302484397484055718871485849",
+            "trades": "15",
+            "by_side": {
+              "long": {
+                "trades": 9,
+                "net_pnl": "308.0882037443719342299402767"
+              },
+              "short": {
+                "trades": 6,
+                "net_pnl": "472.5165799185537843480349469"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "-204.41279995791700232461237",
+            "max_drawdown": "0.07489887852862419048178159626",
+            "trades": "12",
+            "by_side": {
+              "long": {
+                "trades": 1,
+                "net_pnl": "-135.5901731202504666185579550"
+              },
+              "short": {
+                "trades": 11,
+                "net_pnl": "-380.3109315712510856844932912"
+              }
+            }
+          }
+        }
+      }
+    },
+    "donchian_slow_4h": {
+      "selections": [
+        {
+          "test_start": "2021-01-01",
+          "test_end": "2021-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2021-07-01",
+          "test_end": "2022-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2022-01-01",
+          "test_end": "2022-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2022-07-01",
+          "test_end": "2023-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2023-01-01",
+          "test_end": "2023-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2023-07-01",
+          "test_end": "2024-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2024-01-01",
+          "test_end": "2024-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2024-07-01",
+          "test_end": "2025-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2025-01-01",
+          "test_end": "2025-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2025-07-01",
+          "test_end": "2026-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2026-01-01",
+          "test_end": "2026-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2026-07-01",
+          "test_end": "2026-08-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        }
+      ],
+      "walk_forward": {
+        "net_pnl": "0",
+        "annualized_return": "0.000000000000000000000000000",
+        "max_drawdown": "0",
+        "sharpe": "0",
+        "fees": "0",
+        "funding_pnl": "0",
+        "funding_missing_events": 0,
+        "funding_status": "provided_series",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {},
+        "mean_effective_leverage": "0",
+        "trades": 0,
+        "win_rate": "0",
+        "payoff_ratio": "0",
+        "by_side": {
+          "long": {
+            "trades": 0,
+            "net_pnl": "0"
+          },
+          "short": {
+            "trades": 0,
+            "net_pnl": "0"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          }
+        }
+      }
+    },
+    "combo_slow_4h": {
+      "selections": [
+        {
+          "test_start": "2021-01-01",
+          "test_end": "2021-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2021-07-01",
+          "test_end": "2022-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2022-01-01",
+          "test_end": "2022-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2022-07-01",
+          "test_end": "2023-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2023-01-01",
+          "test_end": "2023-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2023-07-01",
+          "test_end": "2024-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2024-01-01",
+          "test_end": "2024-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2024-07-01",
+          "test_end": "2025-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2025-01-01",
+          "test_end": "2025-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2025-07-01",
+          "test_end": "2026-01-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2026-01-01",
+          "test_end": "2026-07-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        },
+        {
+          "test_start": "2026-07-01",
+          "test_end": "2026-08-01",
+          "preset": null,
+          "reason": "no_train_candidate_passed"
+        }
+      ],
+      "walk_forward": {
+        "net_pnl": "0",
+        "annualized_return": "0.000000000000000000000000000",
+        "max_drawdown": "0",
+        "sharpe": "0",
+        "fees": "0",
+        "funding_pnl": "0",
+        "funding_missing_events": 0,
+        "funding_status": "provided_series",
+        "liquidations": 0,
+        "rejections": {},
+        "leverage_counts": {},
+        "mean_effective_leverage": "0",
+        "trades": 0,
+        "win_rate": "0",
+        "payoff_ratio": "0",
+        "by_side": {
+          "long": {
+            "trades": 0,
+            "net_pnl": "0"
+          },
+          "short": {
+            "trades": 0,
+            "net_pnl": "0"
+          }
+        },
+        "by_year": {
+          "2021": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2022": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2023": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2024": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2025": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          },
+          "2026": {
+            "net_pnl": "0",
+            "max_drawdown": "0",
+            "trades": "0",
+            "by_side": {
+              "long": {
+                "trades": 0,
+                "net_pnl": "0"
+              },
+              "short": {
+                "trades": 0,
+                "net_pnl": "0"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "cost_stress": {
+    "tsmom_slow_4h": {
+      "net_pnl": "2200.84729608537456948454318",
+      "annualized_return": "0.036293559461560833804392929",
+      "max_drawdown": "0.1814833957460483790403103455",
+      "sharpe": "0.3854260696058142690030411372",
+      "fees": "600.0044152567514988320459543",
+      "funding_pnl": "-902.5722376281169924323450608",
+      "funding_missing_events": 12,
+      "funding_status": "incomplete",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {},
+      "mean_effective_leverage": "0",
+      "trades": 109,
+      "win_rate": "0.2844036697247706422018348624",
+      "payoff_ratio": "3.031420144320813072831437512",
+      "by_side": {
+        "long": {
+          "trades": 51,
+          "net_pnl": "3133.337964005546598856581062"
+        },
+        "short": {
+          "trades": 58,
+          "net_pnl": "-1822.019261052169954891257157"
+        }
+      }
+    },
+    "donchian_slow_4h": {
+      "net_pnl": "0",
+      "annualized_return": "0.000000000000000000000000000",
+      "max_drawdown": "0",
+      "sharpe": "0",
+      "fees": "0",
+      "funding_pnl": "0",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {},
+      "mean_effective_leverage": "0",
+      "trades": 0,
+      "win_rate": "0",
+      "payoff_ratio": "0",
+      "by_side": {
+        "long": {
+          "trades": 0,
+          "net_pnl": "0"
+        },
+        "short": {
+          "trades": 0,
+          "net_pnl": "0"
+        }
+      }
+    },
+    "combo_slow_4h": {
+      "net_pnl": "0",
+      "annualized_return": "0.000000000000000000000000000",
+      "max_drawdown": "0",
+      "sharpe": "0",
+      "fees": "0",
+      "funding_pnl": "0",
+      "funding_missing_events": 0,
+      "funding_status": "provided_series",
+      "liquidations": 0,
+      "rejections": {},
+      "leverage_counts": {},
+      "mean_effective_leverage": "0",
+      "trades": 0,
+      "win_rate": "0",
+      "payoff_ratio": "0",
+      "by_side": {
+        "long": {
+          "trades": 0,
+          "net_pnl": "0"
+        },
+        "short": {
+          "trades": 0,
+          "net_pnl": "0"
+        }
+      }
+    }
+  },
+  "buy_and_hold_before_holdout": {
+    "net_pnl": "154.93638567561650906932359",
+    "funding_pnl": "-11548.79615754988394536323333",
+    "funding_missing_events": 27,
+    "ending_equity": "10154.93638567561650906932359"
+  },
+  "recommendation": {
+    "strategy": null,
+    "reason": "no_candidate_survived_walk_forward_and_cost_stress",
+    "holdout": null
+  }
+}

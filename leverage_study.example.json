@@ -1,0 +1,35 @@
+{
+  "mode": "backtest",
+  "parameters_locked": true,
+  "holdout_label": "reused_2024_2026_previously_inspected",
+  "starting_equity": "10000",
+  "sample_start": "2020-01-01",
+  "sample_end": "2026-10-31",
+  "reused_holdout_start": "2024-01-01",
+  "risk_per_trade_pct": "0.01",
+  "fee_bps": "5",
+  "slippage_bps": "2",
+  "stress_multiplier": "2",
+  "maintenance_rate": "0.004",
+  "liquidation_fee_rate": "0.005",
+  "extra_buffer": "0.001",
+  "max_contract_leverage": 50,
+  "maintenance_source": "approximate_first_bracket_not_exchange_exact",
+  "fapi_leverage_bracket": "http_451_not_used",
+  "baseline": {
+    "name": "baseline_sma_momentum",
+    "interval": "1d",
+    "fast_window": 20,
+    "slow_window": 50,
+    "momentum_window": 20,
+    "stop_pct": "0.08"
+  },
+  "alternative": {
+    "name": "atr_trend_breakout_4h",
+    "interval": "4h",
+    "breakout_window": 20,
+    "atr_window": 14,
+    "atr_stop_multiple": "2.5",
+    "daily_filter_sma": 50
+  }
+}

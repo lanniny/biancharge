@@ -1,0 +1,76 @@
+{
+  "mode": "backtest",
+  "data_label": "synthetic_fixture",
+  "starting_equity": "10000",
+  "sample_split_timestamp": "2024-01-08T00:00:00Z",
+  "report_path": "logs/research-backtest-report.json",
+  "fills_path": "logs/research-backtest-fills.jsonl",
+  "notes": [
+    "示例 K 线是合成夹具，整数价格不是 BTC、AAPL、SPY、QQQ 的真实历史。",
+    "均线窗口很短，只为了让这段夹具能形成信号；这不是寻优，结果不能外推，也不代表收益。",
+    "BTCUSDT 的 funding_rate、mark_close、index_close 列故意留空：资金费应为 unavailable，标记价回退到成交价，指数不可用。",
+    "AAPL / SPY / QQQ 是现金股票或现金 ETF，杠杆只能为 1。它们不是期权、CME 期货，也不是 Binance 的 *USDT 合成合约。"
+  ],
+  "strategy": {
+    "name": "baseline_sma_momentum",
+    "fast_window": 2,
+    "slow_window": 3,
+    "momentum_window": 1,
+    "momentum_threshold": "0",
+    "stop_pct": "0.05"
+  },
+  "risk": {
+    "risk_per_trade_pct": "0.01",
+    "max_position_pct": "0.25",
+    "max_drawdown_pct": "0.20",
+    "max_concurrent_positions": 3
+  },
+  "costs": {
+    "fee_bps": "5",
+    "slippage_bps": "5"
+  },
+  "perp": {
+    "leverage": 2,
+    "maintenance_margin_rate": "0.004"
+  },
+  "equity_session": {
+    "timezone": "America/New_York",
+    "open": "09:30",
+    "close": "16:00"
+  },
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "product": "binance_usdt_perp",
+      "quote_asset": "USDT",
+      "csv": "fixtures/research/btcusdt_perp_synthetic.csv",
+      "leverage": 2,
+      "fee_bps": "5",
+      "slippage_bps": "2"
+    },
+    {
+      "symbol": "AAPL",
+      "product": "us_cash_equity",
+      "quote_asset": "USD",
+      "csv": "fixtures/research/aapl_cash_synthetic.csv",
+      "fee_bps": "5",
+      "slippage_bps": "5"
+    },
+    {
+      "symbol": "SPY",
+      "product": "us_cash_etf",
+      "quote_asset": "USD",
+      "csv": "fixtures/research/spy_cash_synthetic.csv",
+      "fee_bps": "1",
+      "slippage_bps": "1"
+    },
+    {
+      "symbol": "QQQ",
+      "product": "us_cash_etf",
+      "quote_asset": "USD",
+      "csv": "fixtures/research/qqq_cash_synthetic.csv",
+      "fee_bps": "1",
+      "slippage_bps": "1"
+    }
+  ]
+}

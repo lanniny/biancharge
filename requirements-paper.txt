@@ -1,0 +1,2 @@
+# BTCUSDT USD-M forward paper runner.
+# Python 3.11+ standard library only. No exchange SDK and no proxy package.

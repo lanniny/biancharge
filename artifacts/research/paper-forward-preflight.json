@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "host": "fstream.binance.com",
+  "product": "binance_usdt_perp",
+  "symbol": "BTCUSDT",
+  "proxy": "disabled",
+  "rest_fapi": "not_called",
+  "orders_sent": 0,
+  "this_is_not_a_running_paper_session": true,
+  "streams": {
+    "kline_1d": {
+      "event_ms": 1795525342945,
+      "time": "2026-11-24T13:02:22Z"
+    },
+    "mark": {
+      "event_ms": 1795525343001,
+      "time": "2026-11-24T13:02:23Z",
+      "mark": "60424.66154423",
+      "funding_rate": "0.00004160"
+    },
+    "book": {
+      "event_ms": 1795525343649,
+      "time": "2026-11-24T13:02:23Z"
+    }
+  },
+  "handshakes": {
+    "mark_kline": "HTTP/1.1 101 Switching Protocols",
+    "book": "HTTP/1.1 101 Switching Protocols"
+  },
+  "blocker": null,
+  "note": "On this host, daily kline and markPrice arrive on /market/stream; bookTicker arrives on /ws. Both are public fstream.binance.com USD-M streams."
+}

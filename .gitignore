@@ -8,6 +8,8 @@ __pycache__/
 .serena/
 logs/
 approvals/
+data/research-cache/
+paper-state/
 *.pyc
 .env
 .env.*

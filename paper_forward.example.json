@@ -1,0 +1,36 @@
+{
+  "mode": "paper",
+  "symbol": "BTCUSDT",
+  "product": "binance_usdt_perp",
+  "starting_equity": "10000",
+  "leverage": 1,
+  "fee_bps": "5",
+  "slippage_bps": "2",
+  "risk_per_trade_pct": "0.01",
+  "max_position_pct": "1",
+  "stale_mark_seconds": 30,
+  "stale_book_seconds": 15,
+  "heartbeat_seconds": 30,
+  "state_path": "paper-state/btcusdt-paper-state.json",
+  "log_path": "paper-state/btcusdt-paper.jsonl",
+  "stop_path": "paper-state/btcusdt-paper.stop",
+  "strategy": {
+    "name": "baseline_sma_momentum",
+    "fast_window": 20,
+    "slow_window": 50,
+    "momentum_window": 20,
+    "momentum_threshold": "0",
+    "stop_pct": "0.08"
+  },
+  "feed": {
+    "type": "binance_usdt_m_public_ws",
+    "mark_kline_url": "wss://fstream.binance.com/market/stream?streams=btcusdt@markPrice@1s/btcusdt@kline_1d",
+    "book_url": "wss://fstream.binance.com/ws/btcusdt@bookTicker"
+  },
+  "notes": [
+    "只做 BTCUSDT U 本位永续的虚拟纸面。模拟杠杆 1 倍。信号仍是日线 MA20/50 和 8% 止损。",
+    "历史日线只预热指标，不记成前向成交。成交发生在信号收盘之后的第一笔新鲜报价，或下一根日线开盘。",
+    "没有观察到的资金费不会记成 0。标记价过期时不开新仓。",
+    "不读取 API key，不走代理，不调用下单接口。"
+  ]
+}
